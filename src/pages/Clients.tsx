@@ -133,6 +133,43 @@ function CrudTable({
   const renderField = (field: Field) => {
     // hide parent filter field in form
     if (parentFilter && field.key === parentFilter.column) return null;
+
+    if (field.type === 'image') {
+      const currentUrl = formData[field.key];
+      const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const ext = file.name.split('.').pop();
+        const path = `${table}/${Date.now()}.${ext}`;
+        const { error } = await supabase.storage.from('logos').upload(path, file, { upsert: true });
+        if (error) { toast.error('Upload failed: ' + error.message); return; }
+        const url = `${SUPABASE_URL}/storage/v1/object/public/logos/${path}`;
+        setFormData(p => ({ ...p, [field.key]: url }));
+        toast.success('Logo uploaded');
+      };
+      return (
+        <div className="space-y-2">
+          {currentUrl && (
+            <div className="relative inline-block">
+              <img src={currentUrl} alt="Logo" className="h-16 w-auto rounded border object-contain bg-white p-1" />
+              <button
+                type="button"
+                onClick={() => setFormData(p => ({ ...p, [field.key]: '' }))}
+                className="absolute -top-2 -right-2 rounded-full bg-destructive text-destructive-foreground h-5 w-5 flex items-center justify-center"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-muted-foreground hover:text-foreground border rounded-md px-3 py-2 w-fit">
+            <Upload className="h-4 w-4" />
+            {currentUrl ? 'Change logo' : 'Upload logo'}
+            <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+          </label>
+        </div>
+      );
+    }
+
     if (field.type === 'select' && field.foreignTable) {
       const items = foreignData[field.key] || [];
       return (
