@@ -287,16 +287,19 @@ function Breadcrumbs({ items }: { items: Breadcrumb[] }) {
 
 /* ───── Field configs ───── */
 
-const clientFields: Field[] = [
-  { key: 'company_name', label: 'Company Name', required: true },
-  { key: 'contact_name', label: 'Contact Name' },
-  { key: 'phone', label: 'Phone', type: 'tel' },
-  { key: 'email', label: 'Email', type: 'email' },
+const developerFields: Field[] = [
+  { key: 'name', label: 'Name', required: true },
+  { key: 'official_reg_number', label: 'Official Reg Number' },
+  { key: 'street_address', label: 'Street Address', required: true },
+  { key: 'city', label: 'City', required: true },
+  { key: 'county', label: 'County', required: true },
+  { key: 'post_code', label: 'Post Code', required: true },
+  { key: 'website', label: 'Website' },
 ];
 
 const siteFields: Field[] = [
   { key: 'name', label: 'Site Name', required: true },
-  { key: 'client_id', label: 'Client', type: 'select', foreignTable: 'clients', foreignLabel: 'company_name' },
+  { key: 'developer_id', label: 'Developer', type: 'select', foreignTable: 'developers', foreignLabel: 'name' },
   { key: 'address', label: 'Address' },
   { key: 'status', label: 'Status', type: 'select', options: [
     { value: 'active', label: 'Active' },
@@ -317,25 +320,25 @@ const plotFields: Field[] = [
 /* ───── Main page with drill-down ───── */
 
 interface DrillState {
-  client?: { id: string; company_name: string };
+  developer?: { id: string; name: string };
   site?: { id: string; name: string };
 }
 
-export default function Clients() {
+export default function Developers() {
   const [drill, setDrill] = useState<DrillState>({});
 
   // Level 3: Plots for a site
-  if (drill.client && drill.site) {
+  if (drill.developer && drill.site) {
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => setDrill({ client: drill.client })}>
+          <Button variant="ghost" size="icon" onClick={() => setDrill({ developer: drill.developer })}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
             <Breadcrumbs items={[
-              { label: 'Clients', onClick: () => setDrill({}) },
-              { label: drill.client.company_name, onClick: () => setDrill({ client: drill.client }) },
+              { label: 'Developers', onClick: () => setDrill({}) },
+              { label: drill.developer.name, onClick: () => setDrill({ developer: drill.developer }) },
               { label: drill.site.name },
             ]} />
             <h1 className="text-2xl font-semibold">{drill.site.name} – Plots</h1>
@@ -353,7 +356,7 @@ export default function Clients() {
   }
 
   // Level 2: Sites for a client
-  if (drill.client) {
+  if (drill.developer) {
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-3">
@@ -362,10 +365,10 @@ export default function Clients() {
           </Button>
           <div>
             <Breadcrumbs items={[
-              { label: 'Clients', onClick: () => setDrill({}) },
-              { label: drill.client.company_name },
+              { label: 'Developers', onClick: () => setDrill({}) },
+              { label: drill.developer.name },
             ]} />
-            <h1 className="text-2xl font-semibold">{drill.client.company_name} – Sites</h1>
+            <h1 className="text-2xl font-semibold">{drill.developer.name} – Sites</h1>
           </div>
         </div>
         <CrudTable
@@ -373,22 +376,22 @@ export default function Clients() {
           table="sites"
           fields={siteFields}
           defaultValues={{ status: 'active' }}
-          parentFilter={{ column: 'client_id', value: drill.client.id }}
-          onRowClick={(row) => setDrill({ client: drill.client, site: { id: row.id, name: row.name } })}
+          parentFilter={{ column: 'developer_id', value: drill.developer.id }}
+          onRowClick={(row) => setDrill({ developer: drill.developer, site: { id: row.id, name: row.name } })}
         />
       </div>
     );
   }
 
-  // Level 1: Clients
+  // Level 1: Developers
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Clients</h1>
+      <h1 className="text-2xl font-semibold">Developers</h1>
       <CrudTable
-        title="Clients"
-        table="clients"
-        fields={clientFields}
-        onRowClick={(row) => setDrill({ client: { id: row.id, company_name: row.company_name } })}
+        title="Developers"
+        table="developers"
+        fields={developerFields}
+        onRowClick={(row) => setDrill({ developer: { id: row.id, name: row.name } })}
       />
     </div>
   );

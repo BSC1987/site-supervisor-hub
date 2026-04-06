@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 
 const entities = [
-  { title: 'Clients', url: '/clients', icon: Building2 },
+  { title: 'Developers', url: '/developers', icon: Building2 },
   { title: 'Field Users', url: '/field-users', icon: Smartphone },
   { title: 'Tasks', url: '/tasks', icon: ClipboardList },
   { title: 'Site Contacts', url: '/site-contacts', icon: Contact },
