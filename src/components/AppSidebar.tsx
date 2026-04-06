@@ -1,6 +1,5 @@
 import {
-  Users, Building2, MapPin, LayoutGrid, ClipboardList,
-  Smartphone, Contact, HardHat, LogOut
+  Building2, ClipboardList, Smartphone, Contact, LogOut
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,13 +11,9 @@ import {
 import { Button } from '@/components/ui/button';
 
 const entities = [
-  { title: 'Decorators', url: '/decorators', icon: HardHat },
-  { title: 'Supervisors', url: '/supervisors', icon: Users },
   { title: 'Clients', url: '/clients', icon: Building2 },
-  { title: 'Sites', url: '/sites', icon: MapPin },
-  { title: 'Plots', url: '/plots', icon: LayoutGrid },
-  { title: 'Tasks', url: '/tasks', icon: ClipboardList },
   { title: 'Field Users', url: '/field-users', icon: Smartphone },
+  { title: 'Tasks', url: '/tasks', icon: ClipboardList },
   { title: 'Site Contacts', url: '/site-contacts', icon: Contact },
 ];
 

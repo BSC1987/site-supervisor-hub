@@ -5,11 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/AppLayout";
 import Login from "./pages/Login";
-import Decorators from "./pages/Decorators";
-import Supervisors from "./pages/Supervisors";
 import Clients from "./pages/Clients";
-import Sites from "./pages/Sites";
-import Plots from "./pages/Plots";
 import Tasks from "./pages/Tasks";
 import FieldUsers from "./pages/FieldUsers";
 import SiteContacts from "./pages/SiteContacts";
@@ -25,12 +21,8 @@ function ProtectedRoutes() {
   return (
     <AppLayout>
       <Routes>
-        <Route path="/" element={<Navigate to="/decorators" replace />} />
-        <Route path="/decorators" element={<Decorators />} />
-        <Route path="/supervisors" element={<Supervisors />} />
+        <Route path="/" element={<Navigate to="/clients" replace />} />
         <Route path="/clients" element={<Clients />} />
-        <Route path="/sites" element={<Sites />} />
-        <Route path="/plots" element={<Plots />} />
         <Route path="/tasks" element={<Tasks />} />
         <Route path="/field-users" element={<FieldUsers />} />
         <Route path="/site-contacts" element={<SiteContacts />} />
