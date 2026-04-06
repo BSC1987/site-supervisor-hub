@@ -1,25 +1,53 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
-import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import Index from "./pages/Index.tsx";
-import NotFound from "./pages/NotFound.tsx";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { AppLayout } from "@/components/AppLayout";
+import Login from "./pages/Login";
+import Decorators from "./pages/Decorators";
+import Supervisors from "./pages/Supervisors";
+import Clients from "./pages/Clients";
+import Sites from "./pages/Sites";
+import Plots from "./pages/Plots";
+import Tasks from "./pages/Tasks";
+import FieldUsers from "./pages/FieldUsers";
+import SiteContacts from "./pages/SiteContacts";
 
 const queryClient = new QueryClient();
+
+function ProtectedRoutes() {
+  const { user, loading } = useAuth();
+
+  if (loading) return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</div>;
+  if (!user) return <Login />;
+
+  return (
+    <AppLayout>
+      <Routes>
+        <Route path="/" element={<Navigate to="/decorators" replace />} />
+        <Route path="/decorators" element={<Decorators />} />
+        <Route path="/supervisors" element={<Supervisors />} />
+        <Route path="/clients" element={<Clients />} />
+        <Route path="/sites" element={<Sites />} />
+        <Route path="/plots" element={<Plots />} />
+        <Route path="/tasks" element={<Tasks />} />
+        <Route path="/field-users" element={<FieldUsers />} />
+        <Route path="/site-contacts" element={<SiteContacts />} />
+      </Routes>
+    </AppLayout>
+  );
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <Toaster />
       <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+      <AuthProvider>
+        <BrowserRouter>
+          <ProtectedRoutes />
+        </BrowserRouter>
+      </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );
