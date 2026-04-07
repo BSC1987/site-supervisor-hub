@@ -6,9 +6,9 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/AppLayout";
 import Login from "./pages/Login";
 import Developers from "./pages/Clients";
-import Tasks from "./pages/Tasks";
-import FieldUsers from "./pages/FieldUsers";
-import SiteContacts from "./pages/SiteContacts";
+import Invoices from "./pages/Invoices";
+import PlotProgress from "./pages/PlotProgress";
+import TaskTemplates from "./pages/TaskTemplates";
 
 const queryClient = new QueryClient();
 
@@ -23,9 +23,9 @@ function ProtectedRoutes() {
       <Routes>
         <Route path="/" element={<Navigate to="/developers" replace />} />
         <Route path="/developers" element={<Developers />} />
-        <Route path="/tasks" element={<Tasks />} />
-        <Route path="/field-users" element={<FieldUsers />} />
-        <Route path="/site-contacts" element={<SiteContacts />} />
+        <Route path="/invoices" element={<Invoices />} />
+        <Route path="/plot-progress" element={<PlotProgress />} />
+        <Route path="/task-templates" element={<TaskTemplates />} />
       </Routes>
     </AppLayout>
   );

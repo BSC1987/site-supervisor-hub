@@ -1,5 +1,5 @@
 import {
-  Building2, ClipboardList, Smartphone, Contact, LogOut
+  Building2, FileText, CheckCircle, ListChecks, LogOut
 } from 'lucide-react';
 import cordecLogo from '@/assets/cordec-logo.png';
 import { NavLink } from '@/components/NavLink';
@@ -13,9 +13,9 @@ import { Button } from '@/components/ui/button';
 
 const entities = [
   { title: 'Developers', url: '/developers', icon: Building2 },
-  { title: 'Field Users', url: '/field-users', icon: Smartphone },
-  { title: 'Tasks', url: '/tasks', icon: ClipboardList },
-  { title: 'Site Contacts', url: '/site-contacts', icon: Contact },
+  { title: 'Invoices', url: '/invoices', icon: FileText },
+  { title: 'Plot Progress', url: '/plot-progress', icon: CheckCircle },
+  { title: 'Task Templates', url: '/task-templates', icon: ListChecks },
 ];
 
 export function AppSidebar() {
