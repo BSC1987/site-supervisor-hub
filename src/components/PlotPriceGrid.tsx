@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,15 +32,6 @@ interface PlotTaskRow {
 }
 
 const cellKey = (plotId: string, templateId: string) => `${plotId}:${templateId}`;
-
-function colorFor(value: number, min: number, max: number): string | undefined {
-  if (!Number.isFinite(value)) return undefined;
-  if (max === min) return 'hsl(120, 60%, 88%)';
-  const t = (value - min) / (max - min);
-  // 120 = green, 60 = yellow/orange, 0 = red
-  const hue = 120 - t * 120;
-  return `hsl(${hue}, 70%, 85%)`;
-}
 
 function parsePastedGrid(text: string): string[][] {
   const trimmed = text.replace(/\r\n?/g, '\n').replace(/\n+$/, '');
@@ -127,7 +118,8 @@ export function PlotPriceGrid({ siteId, onOpenPlot }: Props) {
         if (task.task_template_id) {
           const k = cellKey(task.plot_id, task.task_template_id);
           idMap[k] = task.id;
-          if (task.price != null) v[k] = String(task.price);
+          // £0 has no domain meaning here — treat as unset so the cell shows blank.
+          if (task.price != null && Number(task.price) !== 0) v[k] = String(task.price);
         }
       }
       setValues(v);
@@ -145,35 +137,19 @@ export function PlotPriceGrid({ siteId, onOpenPlot }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [siteId]);
 
-  // Per-column min/max for the heatmap
-  const columnStats = useMemo(() => {
-    const stats: Record<string, { min: number; max: number }> = {};
-    for (const tpl of templates) {
-      const nums: number[] = [];
-      for (const p of plots) {
-        const v = values[cellKey(p.id, tpl.id)];
-        if (v != null && v !== '') {
-          const n = parseFloat(v);
-          if (Number.isFinite(n)) nums.push(n);
-        }
-      }
-      if (nums.length > 0) {
-        stats[tpl.id] = { min: Math.min(...nums), max: Math.max(...nums) };
-      }
-    }
-    return stats;
-  }, [templates, plots, values]);
-
   // Persist a single cell. Reads taskIds/tasks from refs so sequential awaits see fresh data
   // (e.g. after a previous insert during the same paste batch).
   const persistCell = async (plotId: string, template: Template, rawValue: string) => {
     const key = cellKey(plotId, template.id);
     const trimmed = rawValue.trim();
-    const numeric = trimmed === '' ? null : parseFloat(trimmed);
-    if (trimmed !== '' && !Number.isFinite(numeric)) {
+    const parsed = trimmed === '' ? null : parseFloat(trimmed);
+    if (trimmed !== '' && !Number.isFinite(parsed)) {
       toast.error(`"${trimmed}" is not a valid number`);
       return;
     }
+    // Treat £0 as no-value: blank input, blank cell, NULL in DB.
+    const numeric = parsed === 0 ? null : parsed;
+
     const existingId = taskIdsRef.current[key];
     if (existingId) {
       const { error } = await supabase
@@ -240,37 +216,127 @@ export function PlotPriceGrid({ siteId, onOpenPlot }: Props) {
     const grid = parsePastedGrid(text);
     if (grid.length === 0) return;
 
-    const currentPlots = plotsRef.current;
+    let workingPlots = plotsRef.current;
     const currentTemplates = templatesRef.current;
 
-    // Build the new values map first so the UI updates immediately.
-    const updates: Array<{ plotId: string; template: Template; raw: string }> = [];
-    setValues(prev => {
-      const next = { ...prev };
-      for (let r = 0; r < grid.length; r++) {
-        const plotIdx = anchor.plotIdx + r;
-        if (plotIdx >= currentPlots.length) break;
-        const plot = currentPlots[plotIdx];
-        for (let c = 0; c < grid[r].length; c++) {
-          const tplIdx = anchor.tplIdx + c;
-          if (tplIdx >= currentTemplates.length) break;
-          const template = currentTemplates[tplIdx];
-          const raw = (grid[r][c] ?? '').trim();
-          next[cellKey(plot.id, template.id)] = raw;
-          updates.push({ plotId: plot.id, template, raw });
+    // ---------- Step 1: ensure enough plots exist in Supabase ----------
+    const neededRows = anchor.plotIdx + grid.length;
+    const overflow = neededRows - workingPlots.length;
+    if (overflow > 0) {
+      // Continue numbering from the highest existing numeric plot_name.
+      const numericNames = workingPlots
+        .map(p => parseInt(p.plot_name, 10))
+        .filter(n => Number.isFinite(n));
+      const startNum =
+        numericNames.length > 0
+          ? Math.max(...numericNames) + 1
+          : workingPlots.length + 1;
+      const newRows = Array.from({ length: overflow }, (_, i) => ({
+        site_id: siteId,
+        plot_name: String(startNum + i),
+        status: 'not_started',
+      }));
+
+      // Insert plots into Supabase. Bail out hard on any failure so we never show
+      // visual rows that aren't backed by real DB rows.
+      const { data: insertedPlots, error: insertErr } = await supabase
+        .from('plots')
+        .insert(newRows)
+        .select();
+      if (insertErr) {
+        toast.error('Failed to create plots: ' + insertErr.message);
+        return;
+      }
+      if (!insertedPlots || insertedPlots.length === 0) {
+        toast.error('Failed to create plots: no rows returned (check RLS policies)');
+        return;
+      }
+      if (insertedPlots.length !== overflow) {
+        toast.error(
+          `Plot insert mismatch: expected ${overflow}, got ${insertedPlots.length}`
+        );
+        return;
+      }
+
+      // The AFTER INSERT trigger has just created default plot_tasks for each new plot.
+      // Pull them so taskIdsRef is populated and the upcoming persistCell calls take
+      // the UPDATE branch instead of attempting a duplicate INSERT.
+      const newPlotIds = (insertedPlots as Plot[]).map(p => p.id);
+      const { data: triggerTaskData, error: tasksErr } = await supabase
+        .from('plot_tasks')
+        .select('*')
+        .in('plot_id', newPlotIds);
+      if (tasksErr) {
+        toast.error('Failed to load tasks for new plots: ' + tasksErr.message);
+        return;
+      }
+      const triggerTasks = (triggerTaskData ?? []) as PlotTaskRow[];
+      if (triggerTasks.length === 0) {
+        toast.error(
+          'No plot_tasks were created for the new plots — is the auto-generation trigger enabled?'
+        );
+        return;
+      }
+
+      // Merge into local state + refs synchronously so the cell loop sees the new state.
+      const mergedPlots = [...workingPlots, ...(insertedPlots as Plot[])];
+      mergedPlots.sort((a, b) =>
+        a.plot_name.localeCompare(b.plot_name, undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        })
+      );
+      workingPlots = mergedPlots;
+      plotsRef.current = mergedPlots;
+      setPlots(mergedPlots);
+
+      const mergedTasks = [...tasksRef.current, ...triggerTasks];
+      tasksRef.current = mergedTasks;
+      setTasks(mergedTasks);
+
+      const mergedTaskIds = { ...taskIdsRef.current };
+      for (const t of triggerTasks) {
+        if (t.task_template_id) {
+          mergedTaskIds[cellKey(t.plot_id, t.task_template_id)] = t.id;
         }
       }
-      // Keep the ref in sync immediately so blur on the focused input (which fires after
-      // paste in some browsers) doesn't re-save the pre-paste value.
-      valuesRef.current = next;
-      return next;
-    });
+      taskIdsRef.current = mergedTaskIds;
+      setTaskIds(mergedTaskIds);
 
-    // Persist sequentially so each insert can update the refs before the next one runs.
+      toast.success(`Created ${overflow} new plot${overflow === 1 ? '' : 's'}`);
+    }
+
+    // ---------- Step 2: build the cell update list (no side effects in setState) ----------
+    const updates: Array<{ plotId: string; template: Template; raw: string }> = [];
+    const nextValues = { ...valuesRef.current };
+    for (let r = 0; r < grid.length; r++) {
+      const plotIdx = anchor.plotIdx + r;
+      if (plotIdx >= workingPlots.length) break;
+      const plot = workingPlots[plotIdx];
+      for (let c = 0; c < grid[r].length; c++) {
+        const tplIdx = anchor.tplIdx + c;
+        if (tplIdx >= currentTemplates.length) break;
+        const template = currentTemplates[tplIdx];
+        const raw = (grid[r][c] ?? '').trim();
+        nextValues[cellKey(plot.id, template.id)] = raw;
+        updates.push({ plotId: plot.id, template, raw });
+      }
+    }
+    valuesRef.current = nextValues;
+    setValues(nextValues);
+
+    // ---------- Step 3: persist sequentially ----------
+    // Sequential await so persistCell's synchronous ref updates are visible to the next
+    // iteration. Errors surface as toasts inside persistCell — we don't bail.
     for (const u of updates) {
       // eslint-disable-next-line no-await-in-loop
       await persistCell(u.plotId, u.template, u.raw);
     }
+
+    // ---------- Step 4: safety-net refetch ----------
+    // Pull everything from Supabase one more time so the visible grid is exactly what's
+    // persisted. If any write silently failed above, this surfaces the discrepancy.
+    await fetchAll();
   };
 
   const handleAddPlot = async () => {
@@ -294,6 +360,96 @@ export function PlotPriceGrid({ siteId, onOpenPlot }: Props) {
     fetchAll();
   };
 
+  // Renders one table per task type (internal / external) sharing the same plot rows
+  // and the same global template index, so paste anchoring stays consistent across both.
+  const renderTable = (groupType: 'internal' | 'external', label: string) => {
+    const groupTemplates = templates
+      .map((tpl, idx) => ({ tpl, idx }))
+      .filter(({ tpl }) => tpl.type === groupType);
+
+    if (groupTemplates.length === 0) {
+      return (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            {label}
+          </h3>
+          <div className="text-sm text-muted-foreground italic">
+            No {label.toLowerCase()} task templates.
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          {label}
+        </h3>
+        <div
+          className="border rounded-lg overflow-auto max-h-[70vh]"
+          onPaste={handleTablePaste}
+        >
+          <table className="text-sm border-collapse w-full">
+            <thead className="sticky top-0 z-20">
+              <tr>
+                <th className="text-left px-3 py-2 border-b font-medium sticky left-0 bg-muted z-30">
+                  Plot
+                </th>
+                {groupTemplates.map(({ tpl }) => (
+                  <th
+                    key={tpl.id}
+                    className="px-3 py-2 border-b border-l font-medium whitespace-nowrap text-center bg-muted"
+                  >
+                    {tpl.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {plots.map((plot, plotIdx) => (
+                <tr key={plot.id}>
+                  <td className="px-3 py-1 border-b sticky left-0 bg-card font-medium z-10 align-middle">
+                    <button
+                      type="button"
+                      className="hover:underline text-left"
+                      onClick={() => onOpenPlot({ id: plot.id, plot_name: plot.plot_name })}
+                    >
+                      {plot.plot_name}
+                    </button>
+                  </td>
+                  {groupTemplates.map(({ tpl, idx: tplIdx }) => {
+                    const key = cellKey(plot.id, tpl.id);
+                    const raw = values[key] ?? '';
+                    return (
+                      <td
+                        key={tpl.id}
+                        className="border-b border-l p-0 min-w-[100px] align-middle"
+                      >
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={raw}
+                          data-plot-idx={plotIdx}
+                          data-template-idx={tplIdx}
+                          onFocus={() => {
+                            focusedCellRef.current = { plotIdx, tplIdx };
+                          }}
+                          onChange={e => handleChange(plot.id, tpl.id, e.target.value)}
+                          onBlur={() => handleBlur(plot.id, tpl)}
+                          className="w-full bg-transparent px-3 py-2 text-center outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                        />
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) return <div className="text-muted-foreground">Loading…</div>;
 
   return (
@@ -312,79 +468,10 @@ export function PlotPriceGrid({ siteId, onOpenPlot }: Props) {
           No task templates exist. Add some on the Task Templates page.
         </div>
       ) : (
-        <div
-          className="border rounded-lg overflow-auto max-h-[70vh]"
-          onPaste={handleTablePaste}
-        >
-          <table className="text-sm border-collapse">
-            <thead className="sticky top-0 z-20">
-              <tr>
-                <th className="text-left px-3 py-2 border-b font-medium sticky left-0 bg-muted z-30">
-                  Plot
-                </th>
-                {templates.map(tpl => (
-                  <th
-                    key={tpl.id}
-                    className={`px-3 py-2 border-b border-l font-medium whitespace-nowrap text-center ${
-                      tpl.type === 'internal' ? 'bg-blue-50' : 'bg-amber-50'
-                    }`}
-                  >
-                    <div>{tpl.name}</div>
-                    <div className="text-[10px] uppercase text-muted-foreground font-normal">
-                      {tpl.type}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {plots.map((plot, plotIdx) => (
-                <tr key={plot.id}>
-                  <td className="px-3 py-1 border-b sticky left-0 bg-card font-medium z-10">
-                    <button
-                      type="button"
-                      className="hover:underline text-left"
-                      onClick={() => onOpenPlot({ id: plot.id, plot_name: plot.plot_name })}
-                    >
-                      {plot.plot_name}
-                    </button>
-                  </td>
-                  {templates.map((tpl, tplIdx) => {
-                    const key = cellKey(plot.id, tpl.id);
-                    const raw = values[key] ?? '';
-                    const num = raw === '' ? NaN : parseFloat(raw);
-                    const stats = columnStats[tpl.id];
-                    const bg =
-                      stats && Number.isFinite(num)
-                        ? colorFor(num, stats.min, stats.max)
-                        : undefined;
-                    return (
-                      <td
-                        key={tpl.id}
-                        className="border-b border-l p-0 min-w-[100px]"
-                        style={{ backgroundColor: bg }}
-                      >
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={raw}
-                          data-plot-idx={plotIdx}
-                          data-template-idx={tplIdx}
-                          onFocus={() => {
-                            focusedCellRef.current = { plotIdx, tplIdx };
-                          }}
-                          onChange={e => handleChange(plot.id, tpl.id, e.target.value)}
-                          onBlur={() => handleBlur(plot.id, tpl)}
-                          className="w-full bg-transparent px-3 py-1 text-right outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
-                        />
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {renderTable('internal', 'Internal')}
+          {renderTable('external', 'External')}
+        </>
       )}
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
