@@ -4,8 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Plus } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 interface Plot {
   id: string;
@@ -53,6 +54,7 @@ export function PlotPriceGrid({ siteId, onOpenPlot }: Props) {
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [newPlotName, setNewPlotName] = useState('');
+  const [plotToDelete, setPlotToDelete] = useState<Plot | null>(null);
 
   // Refs that always hold the latest snapshot of the state we read inside async work.
   // Closures captured by handlers see the snapshot from the render they were created in,
@@ -360,6 +362,41 @@ export function PlotPriceGrid({ siteId, onOpenPlot }: Props) {
     fetchAll();
   };
 
+  const handleDeletePlot = async () => {
+    if (!plotToDelete) return;
+    const target = plotToDelete;
+    setPlotToDelete(null);
+    // plot_tasks.plot_id has ON DELETE CASCADE so deleting the plot drops all its tasks.
+    const { error } = await supabase.from('plots').delete().eq('id', target.id);
+    if (error) {
+      toast.error('Delete failed: ' + error.message);
+      return;
+    }
+    toast.success(`Plot ${target.plot_name} deleted`);
+
+    // Update local state + refs synchronously so the rows disappear from both tables.
+    const remainingPlots = plotsRef.current.filter(p => p.id !== target.id);
+    plotsRef.current = remainingPlots;
+    setPlots(remainingPlots);
+
+    const remainingTasks = tasksRef.current.filter(t => t.plot_id !== target.id);
+    tasksRef.current = remainingTasks;
+    setTasks(remainingTasks);
+
+    const remainingTaskIds = { ...taskIdsRef.current };
+    const remainingValues = { ...valuesRef.current };
+    for (const k of Object.keys(remainingTaskIds)) {
+      if (k.startsWith(target.id + ':')) delete remainingTaskIds[k];
+    }
+    for (const k of Object.keys(remainingValues)) {
+      if (k.startsWith(target.id + ':')) delete remainingValues[k];
+    }
+    taskIdsRef.current = remainingTaskIds;
+    valuesRef.current = remainingValues;
+    setTaskIds(remainingTaskIds);
+    setValues(remainingValues);
+  };
+
   // Renders one table per task type (internal / external) sharing the same plot rows
   // and the same global template index, so paste anchoring stays consistent across both.
   const renderTable = (groupType: 'internal' | 'external', label: string) => {
@@ -403,6 +440,7 @@ export function PlotPriceGrid({ siteId, onOpenPlot }: Props) {
                     {tpl.name}
                   </th>
                 ))}
+                <th className="px-2 py-2 border-b border-l bg-muted w-[44px]" aria-label="Actions" />
               </tr>
             </thead>
             <tbody>
@@ -441,6 +479,16 @@ export function PlotPriceGrid({ siteId, onOpenPlot }: Props) {
                       </td>
                     );
                   })}
+                  <td className="border-b border-l p-0 align-middle text-center">
+                    <button
+                      type="button"
+                      onClick={() => setPlotToDelete(plot)}
+                      aria-label={`Delete plot ${plot.plot_name}`}
+                      className="inline-flex items-center justify-center h-8 w-8 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -497,6 +545,14 @@ export function PlotPriceGrid({ siteId, onOpenPlot }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!plotToDelete}
+        onClose={() => setPlotToDelete(null)}
+        onConfirm={handleDeletePlot}
+        title={plotToDelete ? `Delete plot ${plotToDelete.plot_name}?` : 'Delete plot?'}
+        description="This will remove the plot and all its task prices. This cannot be undone."
+      />
     </div>
   );
 }
