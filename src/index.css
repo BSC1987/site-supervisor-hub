@@ -4,49 +4,60 @@
 
 @layer base {
   :root {
-    --background: 210 11% 95%;       /* #EDEFF0 */
-    --foreground: 200 7% 16%;        /* #191B1C */
+    /* Cordec dark palette
+       #191B1C deepest dark   – page background
+       #383B3D card/panel     – cards, popovers, inputs
+       #595F61 borders        – dividers, separators
+       #7B8285 muted          – secondary text, icons, placeholders
+       #9BA3A8 body           – body text
+       #C2C9CC primary text   – headings
+       #EDEFF0 brightest      – key figures, emphasis
+       #E32A2A brand red      – primary actions, alerts, accents
+    */
 
-    --card: 0 0% 100%;
-    --card-foreground: 200 7% 16%;   /* #191B1C */
+    --background: 200 7% 10%;          /* #191B1C */
+    --foreground: 204 9% 78%;          /* #C2C9CC */
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 200 7% 16%;
+    --card: 204 4% 23%;                /* #383B3D */
+    --card-foreground: 204 9% 78%;     /* #C2C9CC */
 
-    --primary: 4 76% 53%;              /* #E32A2A - main logo colour */
-    --primary-foreground: 0 0% 100%;
+    --popover: 204 4% 23%;             /* #383B3D */
+    --popover-foreground: 204 9% 78%;
 
-    --secondary: 210 11% 95%;        /* #EDEFF0 */
-    --secondary-foreground: 200 5% 30%;  /* #383B3D area */
+    --primary: 0 76% 53%;              /* #E32A2A */
+    --primary-foreground: 204 6% 94%;  /* #EDEFF0 */
 
-    --muted: 207 10% 87%;            /* #C2C9CC */
-    --muted-foreground: 204 5% 50%;  /* #7B8285 */
+    --secondary: 200 5% 37%;           /* #595F61 */
+    --secondary-foreground: 204 6% 94%;
 
-    --accent: 180 98% 56%;           /* #2AE3E3 */
-    --accent-foreground: 200 7% 16%;
+    --muted: 204 4% 23%;               /* #383B3D */
+    --muted-foreground: 207 6% 63%;    /* #9BA3A8 */
 
-    --destructive: 4 76% 53%;        /* #E32A2A */
-    --destructive-foreground: 0 0% 100%;
+    --accent: 200 5% 37%;              /* #595F61 */
+    --accent-foreground: 204 6% 94%;
 
-    --border: 207 10% 87%;           /* #C2C9CC */
-    --input: 207 10% 87%;
-    --ring: 180 73% 40%;             /* #179393 */
+    --destructive: 0 76% 53%;          /* #E32A2A */
+    --destructive-foreground: 204 6% 94%;
 
-    --radius: 0.5rem;
+    --border: 200 5% 37%;              /* #595F61 */
+    --input: 200 5% 37%;               /* #595F61 */
+    --ring: 0 76% 53%;                 /* #E32A2A */
 
-    --sidebar-background: 200 7% 16%;    /* #191B1C */
-    --sidebar-foreground: 207 10% 87%;   /* #C2C9CC */
-    --sidebar-primary: 180 98% 56%;      /* #2AE3E3 */
-    --sidebar-primary-foreground: 200 7% 16%;
-    --sidebar-accent: 200 5% 24%;        /* #383B3D */
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 200 5% 30%;        /* #595F61 */
-    --sidebar-ring: 180 73% 40%;
+    --radius: 0.5rem;                  /* 8px */
 
-    --success: 180 73% 40%;          /* #179393 */
-    --success-foreground: 0 0% 100%;
-    --warning: 5 91% 68%;            /* #F76E62 */
-    --warning-foreground: 0 0% 100%;
+    --sidebar-background: 200 7% 10%;  /* #191B1C */
+    --sidebar-foreground: 204 4% 50%;  /* #7B8285 */
+    --sidebar-primary: 0 76% 53%;      /* #E32A2A */
+    --sidebar-primary-foreground: 204 6% 94%;
+    --sidebar-accent: 204 4% 23%;      /* #383B3D */
+    --sidebar-accent-foreground: 204 6% 94%;  /* #EDEFF0 */
+    --sidebar-border: 200 5% 37%;      /* #595F61 */
+    --sidebar-ring: 0 76% 53%;
+
+    --success: 207 6% 63%;             /* #9BA3A8 - neutral instead of green */
+    --success-foreground: 204 6% 94%;
+    --warning: 0 76% 53%;              /* #E32A2A */
+    --warning-foreground: 204 6% 94%;
   }
 }
 
@@ -55,8 +66,124 @@
     @apply border-border;
   }
 
-  body {
+  html,
+  body,
+  #root {
     @apply bg-background text-foreground;
+  }
+
+  body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1 {
+    @apply text-2xl font-semibold tracking-tight;
+    color: hsl(204 6% 94%);   /* #EDEFF0 */
+  }
+
+  h2 {
+    @apply text-xl font-semibold tracking-tight;
+    color: hsl(204 9% 78%);   /* #C2C9CC */
+  }
+
+  h3 {
+    @apply text-base font-semibold;
+    color: hsl(204 9% 78%);
+  }
+
+  /* Numeric KPIs / emphasised figures */
+  .kpi,
+  [data-kpi] {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: hsl(204 6% 94%);
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer components {
+  /* Card uplift: uniform radius, padding, no harsh borders */
+  [data-slot="card"],
+  .card-surface {
+    background-color: hsl(var(--card));
+    border-radius: var(--radius);
+    border: 1px solid hsl(var(--border) / 0.4);
+    padding: 1.25rem;
+  }
+
+  /* Section headings inside cards: 14px semi-bold uppercase, tracked */
+  .card-heading {
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: hsl(204 9% 78%);
+  }
+
+  /* Table polish — alternating rows + uppercase headers */
+  table thead th {
+    color: hsl(204 9% 78%);
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+  }
+
+  table tbody tr {
+    color: hsl(204 6% 94%);   /* #EDEFF0 — row data is the dominant element */
+  }
+
+  table tbody tr:nth-child(even) {
+    background-color: hsl(200 7% 10%);   /* #191B1C alternating row */
+  }
+
+  table tbody tr:hover {
+    background-color: hsl(200 5% 37%);   /* #595F61 hover */
+  }
+
+  /* Progress: red fill, muted track, rounded ends */
+  [role="progressbar"] {
+    background-color: hsl(var(--border)) !important;
+    border-radius: 9999px;
+    height: 0.5rem;
+    overflow: hidden;
+  }
+
+  [role="progressbar"] > * {
+    background-color: hsl(var(--primary)) !important;
+    border-radius: 9999px;
+  }
+
+  /* Inputs / selects / textareas — card-tinted, subtle border */
+  input,
+  select,
+  textarea {
+    background-color: hsl(200 7% 10%);
+    color: hsl(204 6% 94%);
+    border-color: hsl(var(--border));
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: hsl(204 4% 50%);
+  }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: hsl(200 7% 10%);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(200 5% 37%);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(204 4% 50%);
   }
 }

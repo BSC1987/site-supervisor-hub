@@ -41,6 +41,7 @@ export default function TaskTemplates() {
     const { data, error } = await supabase
       .from('task_templates')
       .select('*')
+      .eq('archived', false)
       .order('type', { ascending: true })
       .order('sort_order', { ascending: true });
     if (error) toast.error('Failed to load: ' + error.message);
@@ -87,7 +88,13 @@ export default function TaskTemplates() {
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    const { error } = await supabase.from('task_templates').delete().eq('id', deleteId);
+    // Soft delete: archived templates no longer auto-add to new plots and disappear
+    // from the price grid, but existing plot_tasks rows that reference them stay
+    // intact for historical reporting.
+    const { error } = await supabase
+      .from('task_templates')
+      .update({ archived: true })
+      .eq('id', deleteId);
     if (error) toast.error('Delete failed: ' + error.message);
     else { toast.success('Deleted'); fetchTemplates(); }
     setDeleteId(null);

@@ -1,5 +1,5 @@
 import {
-  Building2, FileText, CheckCircle, ListChecks, LogOut
+  Building2, ListChecks, LogOut
 } from 'lucide-react';
 import cordecLogo from '@/assets/cordec-logo.png';
 import { NavLink } from '@/components/NavLink';
@@ -13,8 +13,6 @@ import { Button } from '@/components/ui/button';
 
 const entities = [
   { title: 'Developers', url: '/developers', icon: Building2 },
-  { title: 'Invoices', url: '/invoices', icon: FileText },
-  { title: 'Plot Progress', url: '/plot-progress', icon: CheckCircle },
   { title: 'Task Templates', url: '/task-templates', icon: ListChecks },
 ];
 
@@ -38,7 +36,12 @@ export function AppSidebar() {
               {entities.map(item => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <NavLink to={item.url} end className="hover:bg-sidebar-accent/50" activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">
+                    <NavLink
+                      to={item.url}
+                      end
+                      className="relative pl-4 text-sidebar-foreground hover:bg-sidebar-accent/40 hover:text-sidebar-accent-foreground transition-colors"
+                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[3px] before:rounded-r before:bg-primary"
+                    >
                       <item.icon className="mr-2 h-4 w-4" />
                       {!collapsed && <span>{item.title}</span>}
                     </NavLink>
