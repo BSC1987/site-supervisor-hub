@@ -746,11 +746,19 @@ export default function Users() {
     });
     if (error) {
       toast.error('Failed to update status: ' + error.message);
-    } else {
-      toast.success(status === 'approved' ? 'User approved' : 'User rejected');
-      fetchUsers();
-      refreshPendingCount();
+      return;
     }
+    if (status === 'approved') {
+      const { error: roleErr } = await supabase.from('user_roles').insert({
+        user_id: userId,
+        role: 'decorator',
+        rate: 18,
+      });
+      if (roleErr) toast.error('Approved but failed to assign role: ' + roleErr.message);
+    }
+    toast.success(status === 'approved' ? 'User approved as decorator' : 'User rejected');
+    fetchUsers();
+    refreshPendingCount();
   };
 
   if (selected) {
