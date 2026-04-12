@@ -24,6 +24,27 @@ export function PendingUsersProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refreshPendingCount();
+
+    // Poll every 30 seconds for new signups
+    const interval = setInterval(refreshPendingCount, 30_000);
+
+    // Also subscribe to realtime changes on profiles table
+    const channel = supabase
+      .channel('pending-users')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'profiles',
+        filter: 'status=eq.pending',
+      }, () => {
+        refreshPendingCount();
+      })
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, [refreshPendingCount]);
 
   return (
