@@ -469,11 +469,13 @@ interface PendingUser {
   created_at: string;
 }
 
-function PendingSection({ users, onAction }: {
+function PendingSection({ users, onAction, onDelete }: {
   users: PendingUser[];
   onAction: (userId: string, status: 'approved' | 'rejected') => Promise<void>;
+  onDelete: (userId: string) => Promise<void>;
 }) {
   const [loading, setLoading] = useState<Record<string, boolean>>({});
+  const [confirmDelete, setConfirmDelete] = useState<PendingUser | null>(null);
 
   if (users.length === 0) return null;
 
@@ -535,15 +537,43 @@ function PendingSection({ users, onAction }: {
                 variant="outline"
                 className="flex-1 border-red-500/50 text-red-500 hover:bg-red-500/10"
                 disabled={!!loading[u.user_id]}
-                onClick={() => handle(u.user_id, 'rejected')}
+                onClick={() => setConfirmDelete(u)}
               >
-                <X className="mr-1.5 h-3.5 w-3.5" />
-                {loading[u.user_id] ? 'Saving…' : 'Reject'}
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                Reject
               </Button>
             </div>
           </div>
         ))}
       </div>
+
+      <Dialog open={!!confirmDelete} onOpenChange={open => { if (!open) setConfirmDelete(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject & Delete User</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Permanently reject and delete <span className="font-medium text-foreground">{confirmDelete && ([confirmDelete.first_name, confirmDelete.last_name].filter(Boolean).map(s => capitalize(s)).join(' ') || confirmDelete.email)}</span>? This removes their account entirely.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDelete(null)} disabled={!!confirmDelete && !!loading[confirmDelete.user_id]}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={!!confirmDelete && !!loading[confirmDelete.user_id]}
+              onClick={async () => {
+                if (!confirmDelete) return;
+                setLoading(prev => ({ ...prev, [confirmDelete.user_id]: true }));
+                await onDelete(confirmDelete.user_id);
+                setLoading(prev => ({ ...prev, [confirmDelete.user_id]: false }));
+                setConfirmDelete(null);
+              }}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {confirmDelete && loading[confirmDelete.user_id] ? 'Deleting…' : 'Reject & Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -854,6 +884,17 @@ export default function Users() {
     refreshPendingCount();
   };
 
+  const handleDeletePending = async (userId: string) => {
+    const { error } = await supabase.rpc('hard_delete_user', { _user_id: userId });
+    if (error) {
+      toast.error('Failed to delete user: ' + error.message);
+    } else {
+      toast.success('User rejected and deleted');
+      fetchUsers();
+      refreshPendingCount();
+    }
+  };
+
   const handleDeleteUser = async (user: UserRow) => {
     const { error } = await supabase.rpc('hard_delete_user', {
       _user_id: user.user_id,
@@ -912,7 +953,7 @@ export default function Users() {
         <p className="text-sm text-muted-foreground italic">No users found</p>
       ) : (
         <>
-          <PendingSection users={pendingUsers} onAction={handlePendingAction} />
+          <PendingSection users={pendingUsers} onAction={handlePendingAction} onDelete={handleDeletePending} />
           {showInactive ? (
             <UserTable label="Inactive Users" users={inactive} onSelect={setSelected} onUpdate={handleInlineUpdate} onDelete={handleDeleteUser} />
           ) : (
