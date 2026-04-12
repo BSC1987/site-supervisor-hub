@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Save, ChevronDown, UserX, Plus, Check, X, Clock, Trash2 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { usePendingUsers } from '@/contexts/PendingUsersContext';
 
@@ -38,7 +39,20 @@ interface UserRow {
   role: string | null;
   rate: number | null;
   role_id: string | null;
+  notify_issue_report: boolean;
+  notify_hourly_agreement: boolean;
+  notify_sign_off: boolean;
+  notify_quality_report: boolean;
+  notify_invoice: boolean;
 }
+
+const STAFF_NOTIFICATION_FIELDS = [
+  { key: 'notify_issue_report', label: 'Issue Reports' },
+  { key: 'notify_hourly_agreement', label: 'Hourly Agreements' },
+  { key: 'notify_sign_off', label: 'Sign Offs' },
+  { key: 'notify_quality_report', label: 'Quality Reports' },
+  { key: 'notify_invoice', label: 'Invoices' },
+] as const;
 
 interface SignOff {
   id: string;
@@ -582,12 +596,13 @@ function PendingSection({ users, onAction, onDelete }: {
 /*  Main list                                                          */
 /* ------------------------------------------------------------------ */
 
-function UserTable({ label, users, onSelect, onUpdate, onDelete }: {
+function UserTable({ label, users, onSelect, onUpdate, onDelete, onToggleNotification }: {
   label: string;
   users: UserRow[];
   onSelect: (u: UserRow) => void;
   onUpdate: (u: UserRow, patch: { role?: string; is_active?: boolean }) => void;
   onDelete?: (u: UserRow) => void;
+  onToggleNotification?: (u: UserRow, field: typeof STAFF_NOTIFICATION_FIELDS[number]['key'], value: boolean) => void;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -619,27 +634,23 @@ function UserTable({ label, users, onSelect, onUpdate, onDelete }: {
   return (
     <div className="space-y-2">
       <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{label}</h3>
-      <div className="border rounded-lg bg-card">
-        <Table className="table-fixed">
-          <colgroup>
-            <col className={onDelete ? "w-[30%]" : "w-[35%]"} />
-            <col className="w-[20%]" />
-            <col className={onDelete ? "w-[20%]" : "w-[25%]"} />
-            <col className="w-[20%]" />
-            {onDelete && <col className="w-[10%]" />}
-          </colgroup>
+      <div className="border rounded-lg bg-card overflow-x-auto">
+        <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="h-9 cursor-pointer select-none text-center" onClick={() => toggleSort('name')}>
+              <TableHead className="h-9 cursor-pointer select-none text-center min-w-[160px]" onClick={() => toggleSort('name')}>
                 Name <SortIcon col="name" />
               </TableHead>
-              <TableHead className="h-9 cursor-pointer select-none text-center" onClick={() => toggleSort('role')}>
+              <TableHead className="h-9 cursor-pointer select-none text-center min-w-[120px]" onClick={() => toggleSort('role')}>
                 Role <SortIcon col="role" />
               </TableHead>
-              <TableHead className="h-9 cursor-pointer select-none text-center" onClick={() => toggleSort('rate')}>
+              <TableHead className="h-9 cursor-pointer select-none text-center min-w-[100px]" onClick={() => toggleSort('rate')}>
                 Hourly Rate <SortIcon col="rate" />
               </TableHead>
-              <TableHead className="h-9 text-center">Status</TableHead>
+              <TableHead className="h-9 text-center min-w-[100px]">Status</TableHead>
+              {onToggleNotification && STAFF_NOTIFICATION_FIELDS.map(({ key, label }) => (
+                <TableHead key={key} className="h-9 text-center min-w-[100px]">{label}</TableHead>
+              ))}
               {onDelete && <TableHead className="h-9" />}
             </TableRow>
           </TableHeader>
@@ -688,6 +699,14 @@ function UserTable({ label, users, onSelect, onUpdate, onDelete }: {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
+                {onToggleNotification && STAFF_NOTIFICATION_FIELDS.map(({ key }) => (
+                  <TableCell key={key} className="py-2 text-center" onClick={e => e.stopPropagation()}>
+                    <Switch
+                      checked={u[key]}
+                      onCheckedChange={(checked) => onToggleNotification(u, key, checked)}
+                    />
+                  </TableCell>
+                ))}
                 {onDelete && (
                   <TableCell className="py-2 text-center" onClick={e => e.stopPropagation()}>
                     <Button
@@ -828,6 +847,18 @@ export default function Users() {
     }
   };
 
+  const handleToggleNotification = async (user: UserRow, field: typeof STAFF_NOTIFICATION_FIELDS[number]['key'], value: boolean) => {
+    setUsers(prev => prev.map(u => u.id === user.id ? { ...u, [field]: value } : u));
+    const { error } = await supabase
+      .from('profiles')
+      .update({ [field]: value })
+      .eq('id', user.id);
+    if (error) {
+      toast.error('Failed to update notification preference');
+      setUsers(prev => prev.map(u => u.id === user.id ? user : u));
+    }
+  };
+
   const handleAddUser = async () => {
     const email = addForm.email.trim().toLowerCase();
     const first = capitalize(addForm.first_name.trim());
@@ -958,7 +989,7 @@ export default function Users() {
             <UserTable label="Inactive Users" users={inactive} onSelect={setSelected} onUpdate={handleInlineUpdate} onDelete={handleDeleteUser} />
           ) : (
             <>
-              <UserTable label="Staff" users={staff} onSelect={setSelected} onUpdate={handleInlineUpdate} />
+              <UserTable label="Staff" users={staff} onSelect={setSelected} onUpdate={handleInlineUpdate} onToggleNotification={handleToggleNotification} />
               <UserTable label="Decorators" users={decorators} onSelect={setSelected} onUpdate={handleInlineUpdate} />
             </>
           )}
