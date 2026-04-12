@@ -12,8 +12,9 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Save, ChevronDown, UserX, Plus } from 'lucide-react';
+import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Save, ChevronDown, UserX, Plus, Check, X, Clock } from 'lucide-react';
 import { toast } from 'sonner';
+import { usePendingUsers } from '@/contexts/PendingUsersContext';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -411,6 +412,103 @@ function UserDetail({ user, onBack, onSaved }: {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Pending approvals                                                  */
+/* ------------------------------------------------------------------ */
+
+interface PendingUser {
+  id: string;
+  user_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  sort_code: string | null;
+  account_number: string | null;
+  national_insurance_number: string | null;
+  utr_number: string | null;
+  created_at: string;
+}
+
+function PendingSection({ users, onAction }: {
+  users: PendingUser[];
+  onAction: (userId: string, status: 'approved' | 'rejected') => Promise<void>;
+}) {
+  const [loading, setLoading] = useState<Record<string, boolean>>({});
+
+  if (users.length === 0) return null;
+
+  const handle = async (userId: string, status: 'approved' | 'rejected') => {
+    setLoading(prev => ({ ...prev, [userId]: true }));
+    await onAction(userId, status);
+    setLoading(prev => ({ ...prev, [userId]: false }));
+  };
+
+  const field = (label: string, value: string | null) => (
+    <div>
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <p className="text-sm">{value || '—'}</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+        <Clock className="h-4 w-4 text-orange-500" />
+        Pending Approvals ({users.length})
+      </h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {users.map(u => (
+          <div key={u.id} className="border rounded-lg p-4 bg-card space-y-3">
+            <div className="flex items-start justify-between">
+              <div>
+                <h4 className="font-medium">
+                  {[u.first_name, u.last_name].filter(Boolean).map(s => capitalize(s)).join(' ') || '(no name)'}
+                </h4>
+                <p className="text-sm text-muted-foreground">{u.email || '—'}</p>
+              </div>
+              <Badge variant="outline" className="border-orange-500/50 text-orange-500">
+                Pending
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {field('Phone', u.phone)}
+              {field('Sort Code', u.sort_code)}
+              {field('Account Number', u.account_number)}
+              {field('National Insurance', u.national_insurance_number)}
+              {field('UTR Number', u.utr_number)}
+              {field('Signed Up', formatDate(u.created_at))}
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button
+                size="sm"
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                disabled={!!loading[u.user_id]}
+                onClick={() => handle(u.user_id, 'approved')}
+              >
+                <Check className="mr-1.5 h-3.5 w-3.5" />
+                {loading[u.user_id] ? 'Saving…' : 'Approve'}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1 border-red-500/50 text-red-500 hover:bg-red-500/10"
+                disabled={!!loading[u.user_id]}
+                onClick={() => handle(u.user_id, 'rejected')}
+              >
+                <X className="mr-1.5 h-3.5 w-3.5" />
+                {loading[u.user_id] ? 'Saving…' : 'Reject'}
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main list                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -526,6 +624,7 @@ function UserTable({ label, users, onSelect, onUpdate }: {
 
 export default function Users() {
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<UserRow | null>(null);
   const [showInactive, setShowInactive] = useState(false);
@@ -535,30 +634,34 @@ export default function Users() {
     phone: '', post_code: '', role: 'decorator', rate: '18',
   });
   const [addSaving, setAddSaving] = useState(false);
+  const { refreshPendingCount } = usePendingUsers();
 
   const fetchUsers = async () => {
     setLoading(true);
-    const { data: profiles, error: pErr } = await supabase
-      .from('profiles')
-      .select('*');
-    const { data: roles, error: rErr } = await supabase
-      .from('user_roles')
-      .select('*');
+    const [profilesRes, rolesRes, pendingRes] = await Promise.all([
+      supabase.from('profiles').select('*').neq('status', 'pending'),
+      supabase.from('user_roles').select('*'),
+      supabase.from('profiles')
+        .select('id, user_id, first_name, last_name, email, phone, sort_code, account_number, national_insurance_number, utr_number, created_at')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false }),
+    ]);
 
-    if (pErr) { toast.error('Failed to load profiles: ' + pErr.message); setLoading(false); return; }
-    if (rErr) { toast.error('Failed to load roles: ' + rErr.message); setLoading(false); return; }
+    if (profilesRes.error) { toast.error('Failed to load profiles: ' + profilesRes.error.message); setLoading(false); return; }
+    if (rolesRes.error) { toast.error('Failed to load roles: ' + rolesRes.error.message); setLoading(false); return; }
 
     const roleMap = new Map<string, { role: string; rate: number; id: string }>();
-    for (const r of roles || []) {
+    for (const r of rolesRes.data || []) {
       roleMap.set(r.user_id, { role: r.role, rate: r.rate, id: r.id });
     }
 
-    const merged: UserRow[] = (profiles || []).map((p: any) => {
+    const merged: UserRow[] = (profilesRes.data || []).map((p: any) => {
       const r = roleMap.get(p.user_id);
       return { ...p, role: r?.role ?? null, rate: r?.rate ?? null, role_id: r?.id ?? null };
     });
 
     setUsers(merged);
+    setPendingUsers((pendingRes.data || []) as PendingUser[]);
     setLoading(false);
   };
 
@@ -636,6 +739,20 @@ export default function Users() {
     setAddSaving(false);
   };
 
+  const handlePendingAction = async (userId: string, status: 'approved' | 'rejected') => {
+    const { error } = await supabase.rpc('update_user_status', {
+      target_user_id: userId,
+      new_status: status,
+    });
+    if (error) {
+      toast.error('Failed to update status: ' + error.message);
+    } else {
+      toast.success(status === 'approved' ? 'User approved' : 'User rejected');
+      fetchUsers();
+      refreshPendingCount();
+    }
+  };
+
   if (selected) {
     return (
       <UserDetail
@@ -682,6 +799,7 @@ export default function Users() {
         <p className="text-sm text-muted-foreground italic">No users found</p>
       ) : (
         <>
+          <PendingSection users={pendingUsers} onAction={handlePendingAction} />
           {showInactive ? (
             <UserTable label="Inactive Users" users={inactive} onSelect={setSelected} onUpdate={handleInlineUpdate} />
           ) : (

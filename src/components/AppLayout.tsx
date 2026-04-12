@@ -4,6 +4,7 @@ import cordecLogo from '@/assets/cordec-logo.png';
 import { NavLink } from '@/components/NavLink';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePendingUsers } from '@/contexts/PendingUsersContext';
 import { Button } from '@/components/ui/button';
 
 const navItems = [
@@ -15,6 +16,7 @@ const navItems = [
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { signOut } = useAuth();
+  const { pendingCount } = usePendingUsers();
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -35,6 +37,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 >
                   <item.icon className="h-4 w-4" />
                   <span>{item.title}</span>
+                  {item.title === 'Users' && pendingCount > 0 && (
+                    <span className="ml-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-orange-500 px-1.5 text-[11px] font-semibold text-white">
+                      {pendingCount}
+                    </span>
+                  )}
                 </NavLink>
               ))}
             </nav>

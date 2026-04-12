@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { PendingUsersProvider } from "@/contexts/PendingUsersContext";
 import { AppLayout } from "@/components/AppLayout";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -17,6 +18,7 @@ function ProtectedRoutes() {
   if (!user) return <Login />;
 
   return (
+    <PendingUsersProvider>
     <AppLayout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
@@ -25,6 +27,7 @@ function ProtectedRoutes() {
         <Route path="/users" element={<Users />} />
       </Routes>
     </AppLayout>
+    </PendingUsersProvider>
   );
 }
 
