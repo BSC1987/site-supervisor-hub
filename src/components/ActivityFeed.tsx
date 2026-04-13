@@ -654,27 +654,26 @@ export default function ActivityFeed() {
     setBulkDeleting(true);
     const selectedItems = items.filter(i => selected.has(itemKey(i)));
 
-    // Group by source table for efficient batch deletes
-    const grouped = new Map<string, string[]>();
-    for (const item of selectedItems) {
-      const ids = grouped.get(item.source_table) || [];
-      ids.push(item.id);
-      grouped.set(item.source_table, ids);
-    }
-
-    let failed = 0;
+    let deleted = 0;
     let invoiceLinked = 0;
-    for (const [table, ids] of grouped) {
-      const { error } = await supabase.from(table).delete().in('id', ids);
+    let failed = 0;
+
+    for (const item of selectedItems) {
+      const { error } = await supabase.from(item.source_table).delete().eq('id', item.id);
       if (error) {
-        if (error.code === '23503') invoiceLinked += ids.length;
-        else failed += ids.length;
+        if (error.code === '23503') invoiceLinked++;
+        else failed++;
+      } else {
+        deleted++;
       }
     }
 
     setBulkDeleting(false);
     setConfirmBulkDelete(false);
 
+    if (deleted > 0) {
+      toast.success(`${deleted} submission(s) deleted`);
+    }
     if (invoiceLinked > 0) {
       toast.error(`${invoiceLinked} item(s) are linked to invoices and could not be deleted`);
     }
