@@ -875,7 +875,6 @@ export default function ActivityFeed() {
                     <div className="flex items-center gap-2">
                       <Icon className={`h-4 w-4 shrink-0 ${config.colour}`} />
                       <span className="font-medium whitespace-nowrap">{item.form_type}</span>
-                      {statusBadge(item.status)}
                     </div>
                   </td>
                   <td className="px-3 py-3 whitespace-nowrap">{item.submitted_by}</td>
