@@ -1,7 +1,7 @@
 import { useEffect, useState, Component, lazy, Suspense } from 'react';
 import type { ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Loader2, MousePointerClick } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 const SiteMapInner = lazy(() => import('./SiteMapInner'));
 
@@ -37,7 +37,6 @@ class MapErrorBoundary extends Component<
 export default function SiteMap() {
   const [sites, setSites] = useState<SiteLocation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [interactive, setInteractive] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -85,7 +84,7 @@ export default function SiteMap() {
           </span>
         )}
       </div>
-      <div className="h-[400px] w-full relative">
+      <div className="h-[400px] w-full">
         <MapErrorBoundary>
           <Suspense
             fallback={
@@ -95,25 +94,9 @@ export default function SiteMap() {
               </div>
             }
           >
-            <SiteMapInner sites={sites} interactive={interactive} />
+            <SiteMapInner sites={sites} />
           </Suspense>
         </MapErrorBoundary>
-
-        {/* Click-to-interact overlay */}
-        {!interactive && !loading && (
-          <button
-            type="button"
-            className="absolute inset-0 z-[1000] cursor-pointer group"
-            onClick={() => setInteractive(true)}
-          >
-            <div className="h-full w-full bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-              <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-background/90 text-foreground text-sm font-medium px-4 py-2 rounded-lg shadow flex items-center gap-2">
-                <MousePointerClick className="h-4 w-4" />
-                Click to interact
-              </span>
-            </div>
-          </button>
-        )}
       </div>
     </div>
   );

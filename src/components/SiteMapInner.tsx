@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -33,37 +33,7 @@ function FitBounds({ sites }: { sites: SiteLocation[] }) {
   return null;
 }
 
-function ToggleInteractions({ interactive }: { interactive: boolean }) {
-  const map = useMap();
-  useEffect(() => {
-    if (interactive) {
-      map.dragging.enable();
-      map.scrollWheelZoom.enable();
-      map.doubleClickZoom.enable();
-      map.touchZoom.enable();
-      map.boxZoom.enable();
-      map.keyboard.enable();
-      if (map.zoomControl) map.zoomControl.getContainer()!.style.display = '';
-    } else {
-      map.dragging.disable();
-      map.scrollWheelZoom.disable();
-      map.doubleClickZoom.disable();
-      map.touchZoom.disable();
-      map.boxZoom.disable();
-      map.keyboard.disable();
-      if (map.zoomControl) map.zoomControl.getContainer()!.style.display = 'none';
-    }
-  }, [map, interactive]);
-  return null;
-}
-
-export default function SiteMapInner({
-  sites,
-  interactive = true,
-}: {
-  sites: SiteLocation[];
-  interactive?: boolean;
-}) {
+export default function SiteMapInner({ sites }: { sites: SiteLocation[] }) {
   return (
     <MapContainer
       center={UK_CENTER}
@@ -75,28 +45,13 @@ export default function SiteMapInner({
       touchZoom={false}
       boxZoom={false}
       keyboard={false}
-      zoomControl={true}
+      zoomControl={false}
+      attributionControl={false}
     >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
       <FitBounds sites={sites} />
-      <ToggleInteractions interactive={interactive} />
       {sites.map((site) => (
-        <Marker key={site.id} position={[site.lat, site.lng]}>
-          <Popup>
-            <div className="text-sm">
-              <p className="font-semibold">{site.name}</p>
-              {site.developer_name && (
-                <p className="text-gray-600">{site.developer_name}</p>
-              )}
-              {site.address && (
-                <p className="text-gray-500 text-xs mt-1">{site.address}</p>
-              )}
-            </div>
-          </Popup>
-        </Marker>
+        <Marker key={site.id} position={[site.lat, site.lng]} />
       ))}
     </MapContainer>
   );
