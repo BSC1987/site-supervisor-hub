@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -517,9 +517,12 @@ export default function ActivityFeed() {
   const [formTypeFilter, setFormTypeFilter] = useState('all');
   const [siteFilter, setSiteFilter] = useState('all');
   const [developerFilter, setDeveloperFilter] = useState('all');
+  const [submitterFilter, setSubmitterFilter] = useState('all');
   const [sites, setSites] = useState<Site[]>([]);
   const [developers, setDevelopers] = useState<Developer[]>([]);
+  const [page, setPage] = useState(0);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const PAGE_SIZE = 100;
 
   // Delete state
   const [confirmDelete, setConfirmDelete] = useState<FeedItem | null>(null);
@@ -577,6 +580,31 @@ export default function ActivityFeed() {
   useEffect(() => {
     loadFeed();
   }, [loadFeed]);
+
+  // Unique submitter names for filter dropdown
+  const submitters = useMemo(() => {
+    const names = [...new Set(items.map(i => i.submitted_by))].filter(n => n !== 'Unknown');
+    return names.sort((a, b) => a.localeCompare(b));
+  }, [items]);
+
+  // Client-side filtering by developer and submitter
+  const filteredItems = useMemo(() => {
+    let result = items;
+    if (developerFilter !== 'all') {
+      const devSiteIds = new Set(sites.filter(s => s.developer_id === developerFilter).map(s => s.id));
+      result = result.filter(i => i.site_id && devSiteIds.has(i.site_id));
+    }
+    if (submitterFilter !== 'all') {
+      result = result.filter(i => i.submitted_by === submitterFilter);
+    }
+    return result;
+  }, [items, developerFilter, submitterFilter, sites]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
+  const pagedItems = filteredItems.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  // Reset page when filters change
+  useEffect(() => { setPage(0); }, [formTypeFilter, siteFilter, developerFilter, submitterFilter]);
 
   // Realtime subscriptions
   useEffect(() => {
@@ -643,10 +671,16 @@ export default function ActivityFeed() {
   };
 
   const toggleSelectAll = () => {
-    if (selected.size === items.length) {
-      setSelected(new Set());
+    const pageKeys = pagedItems.map(itemKey);
+    const allSelected = pageKeys.every(k => selected.has(k));
+    if (allSelected) {
+      setSelected(prev => {
+        const next = new Set(prev);
+        pageKeys.forEach(k => next.delete(k));
+        return next;
+      });
     } else {
-      setSelected(new Set(items.map(itemKey)));
+      setSelected(prev => new Set([...prev, ...pageKeys]));
     }
   };
 
@@ -767,6 +801,18 @@ export default function ActivityFeed() {
               ))}
             </SelectContent>
           </Select>
+
+          <Select value={submitterFilter} onValueChange={setSubmitterFilter}>
+            <SelectTrigger className="h-8 w-[150px] text-xs">
+              <SelectValue placeholder="All submitters" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All submitters</SelectItem>
+              {submitters.map(name => (
+                <SelectItem key={name} value={name}>{name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -779,7 +825,7 @@ export default function ActivityFeed() {
                 <input
                   type="checkbox"
                   className="rounded border-border cursor-pointer accent-primary opacity-40 checked:opacity-100"
-                  checked={items.length > 0 && selected.size === items.length}
+                  checked={pagedItems.length > 0 && pagedItems.every(i => selected.has(itemKey(i)))}
                   onChange={toggleSelectAll}
                 />
               </th>
@@ -800,7 +846,7 @@ export default function ActivityFeed() {
                 </td>
               </tr>
             )}
-            {items.map((item) => {
+            {pagedItems.map((item) => {
               const config = FORM_TYPE_CONFIG[item.form_type];
               const Icon = config.icon;
               const isPending = item.status && ['pending', 'submitted'].includes(item.status.toLowerCase());
@@ -855,6 +901,36 @@ export default function ActivityFeed() {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="px-5 py-3 border-t border-border/60 flex items-center justify-between text-sm text-muted-foreground">
+          <span>{filteredItems.length} submissions</span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              disabled={page === 0}
+              onClick={() => setPage(p => p - 1)}
+            >
+              Previous
+            </Button>
+            <span className="text-xs">
+              Page {page + 1} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              disabled={page >= totalPages - 1}
+              onClick={() => setPage(p => p + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Detail dialog */}
       <Dialog open={!!selectedItem} onOpenChange={open => { if (!open) setSelectedItem(null); }}>
