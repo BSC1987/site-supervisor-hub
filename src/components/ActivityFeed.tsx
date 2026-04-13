@@ -126,6 +126,14 @@ function renderSignOffDetail(record: any, submittedBy: string) {
           <DetailField label="Notes" value={record.notes} />
         </div>
       )}
+      {record.manager_signature && (
+        <div className="col-span-2">
+          <dt className="text-xs text-muted-foreground uppercase tracking-wide">Manager Signature</dt>
+          <dd className="mt-1">
+            <img src={record.manager_signature} alt="Manager signature" className="h-20 rounded border border-border bg-white p-1" />
+          </dd>
+        </div>
+      )}
     </dl>
   );
 }
@@ -170,29 +178,173 @@ function renderHourlyAgreementDetail(record: any, submittedBy: string) {
           </dd>
         </div>
       )}
+      {record.signature_data && (
+        <div className="col-span-2">
+          <dt className="text-xs text-muted-foreground uppercase tracking-wide">Signature</dt>
+          <dd className="mt-1">
+            <img src={record.signature_data} alt="Signature" className="h-20 rounded border border-border bg-white p-1" />
+          </dd>
+        </div>
+      )}
+    </dl>
+  );
+}
+
+function renderIssueReportDetail(record: any, submittedBy: string) {
+  const issues = record.issues as string[] | null;
+  return (
+    <dl className="grid grid-cols-2 gap-x-6 gap-y-3">
+      <DetailField label="Reference" value={record.reference_number} />
+      <DetailField label="Submitted by" value={submittedBy} />
+      <DetailField label="Site" value={record.site_name} />
+      <DetailField label="Plot" value={record.plot_name} />
+      <DetailField label="Task" value={record.task_name} />
+      <DetailField label="Date" value={formatDateTime(record.created_at)} />
+      {issues && issues.length > 0 && (
+        <div className="col-span-2">
+          <DetailField label="Issues" value={
+            <ul className="list-disc list-inside space-y-0.5">
+              {issues.map((issue, i) => <li key={i}>{issue}</li>)}
+            </ul>
+          } />
+        </div>
+      )}
+      {record.photo_urls && record.photo_urls.length > 0 && (
+        <div className="col-span-2">
+          <dt className="text-xs text-muted-foreground uppercase tracking-wide">Photos</dt>
+          <dd className="flex gap-2 mt-1 flex-wrap">
+            {(record.photo_urls as string[]).map((url: string, i: number) => (
+              <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
+                <img src={url} alt={`Photo ${i + 1}`} className="h-20 w-20 object-cover rounded border border-border" />
+              </a>
+            ))}
+          </dd>
+        </div>
+      )}
+    </dl>
+  );
+}
+
+function renderQualityReportDetail(record: any, submittedBy: string) {
+  const photos = record.photos as any[] | null;
+  return (
+    <dl className="grid grid-cols-2 gap-x-6 gap-y-3">
+      <DetailField label="Reference" value={record.reference_number} />
+      <DetailField label="Submitted by" value={submittedBy} />
+      <DetailField label="Site" value={record.site_name} />
+      <DetailField label="Plot" value={record.plot_name} />
+      <DetailField label="Date" value={formatDateTime(record.created_at)} />
+      {photos && photos.length > 0 && (
+        <div className="col-span-2">
+          <dt className="text-xs text-muted-foreground uppercase tracking-wide">Photos</dt>
+          <dd className="flex gap-2 mt-1 flex-wrap">
+            {photos.map((photo: any, i: number) => {
+              const url = typeof photo === 'string' ? photo : photo?.url || photo?.path;
+              if (!url) return null;
+              return (
+                <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
+                  <img src={url} alt={`Photo ${i + 1}`} className="h-20 w-20 object-cover rounded border border-border" />
+                </a>
+              );
+            })}
+          </dd>
+        </div>
+      )}
     </dl>
   );
 }
 
 function renderInvoiceDetail(record: any, submittedBy: string) {
+  const plotItems = (record.plot_items || []) as any[];
+  const hourlyItems = (record.hourly_items || []) as any[];
+  const miscItems = (record.misc_items || []) as any[];
+
   return (
-    <dl className="grid grid-cols-2 gap-x-6 gap-y-3">
-      <DetailField label="Reference" value={record.reference_number} />
-      <DetailField label="Invoice #" value={record.invoice_number} />
-      <DetailField label="Submitted by" value={submittedBy} />
-      <DetailField label="Status" value={statusBadge(record.status)} />
-      <DetailField label="Total amount" value={formatCurrency(record.total_amount)} />
-      <DetailField label="Submitted at" value={formatDateTime(record.submitted_at)} />
-      <DetailField label="Created" value={formatDateTime(record.created_at)} />
-      {record.notes && (
-        <div className="col-span-2">
-          <DetailField label="Notes" value={record.notes} />
+    <div className="space-y-4">
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-3">
+        <DetailField label="Reference" value={record.reference_number} />
+        <DetailField label="Invoice #" value={record.invoice_number} />
+        <DetailField label="Submitted by" value={submittedBy} />
+        <DetailField label="Status" value={statusBadge(record.status)} />
+        <DetailField label="Total amount" value={formatCurrency(record.total_amount)} />
+        <DetailField label="Submitted at" value={formatDateTime(record.submitted_at)} />
+        <DetailField label="Created" value={formatDateTime(record.created_at)} />
+        {record.notes && (
+          <div className="col-span-2">
+            <DetailField label="Notes" value={record.notes} />
+          </div>
+        )}
+      </dl>
+
+      {plotItems.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Plot Items</h4>
+          <div className="border rounded text-sm divide-y divide-border">
+            {plotItems.map((item: any, i: number) => (
+              <div key={i} className="px-3 py-2 grid grid-cols-[1fr_auto] gap-2">
+                <div>
+                  <span className="font-medium">{item.site_name}</span>
+                  <span className="text-muted-foreground"> / Plot {item.plot_name}</span>
+                  <span className="text-muted-foreground"> / {item.task_type}</span>
+                  {item.note && <p className="text-xs text-muted-foreground mt-0.5">{item.note}</p>}
+                </div>
+                <div className="text-right whitespace-nowrap">
+                  {item.percentage != null && item.percentage < 100 && (
+                    <span className="text-muted-foreground text-xs mr-1">{item.percentage}% of {formatCurrency(item.full_price)}</span>
+                  )}
+                  <span className="font-medium">{formatCurrency(item.amount)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
+
+      {hourlyItems.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Hourly Agreements</h4>
+          <div className="border rounded text-sm divide-y divide-border">
+            {hourlyItems.map((item: any, i: number) => {
+              const ha = item.hourly_agreement;
+              return (
+                <div key={i} className="px-3 py-2 grid grid-cols-[1fr_auto] gap-2">
+                  <div>
+                    <span className="font-medium">{ha?.site_name || '—'}</span>
+                    <span className="text-muted-foreground"> / Plot {ha?.plot_name || '—'}</span>
+                    <span className="text-muted-foreground"> / {ha?.hours}h @ {formatCurrency(ha?.rate)}</span>
+                  </div>
+                  <div className="text-right font-medium">
+                    {ha?.hours && ha?.rate ? formatCurrency(ha.hours * ha.rate) : '—'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {miscItems.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Misc Items</h4>
+          <div className="border rounded text-sm divide-y divide-border">
+            {miscItems.map((item: any, i: number) => (
+              <div key={i} className="px-3 py-2 grid grid-cols-[1fr_auto] gap-2">
+                <div>
+                  <span className="font-medium">{item.description || 'Misc item'}</span>
+                  {item.hours && <span className="text-muted-foreground"> / {item.hours}h @ {formatCurrency(item.rate)}</span>}
+                  {item.note && <p className="text-xs text-muted-foreground mt-0.5">{item.note}</p>}
+                </div>
+                <div className="text-right font-medium">{formatCurrency(item.amount)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {record.document_urls && record.document_urls.length > 0 && (
-        <div className="col-span-2">
-          <dt className="text-xs text-muted-foreground uppercase tracking-wide">Documents</dt>
-          <dd className="flex flex-col gap-1 mt-1">
+        <div>
+          <dt className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Documents</dt>
+          <dd className="flex flex-col gap-1">
             {(record.document_urls as string[]).map((url, i) => (
               <a key={i} href={url} target="_blank" rel="noopener noreferrer"
                 className="text-sm text-blue-400 hover:underline inline-flex items-center gap-1">
@@ -203,7 +355,7 @@ function renderInvoiceDetail(record: any, submittedBy: string) {
           </dd>
         </div>
       )}
-    </dl>
+    </div>
   );
 }
 
@@ -327,6 +479,25 @@ async function fetchFeed(filters: {
 }
 
 async function fetchDetail(sourceTable: string, id: string): Promise<any> {
+  if (sourceTable === 'issue_report_submissions') {
+    const { data, error } = await supabase
+      .from(sourceTable)
+      .select('*, site:sites(name), plot:plots(plot_name)')
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+    return { ...data, site_name: data.site?.name ?? null, plot_name: data.plot?.plot_name ?? null };
+  }
+  if (sourceTable === 'invoices') {
+    const [invRes, plotRes, haRes, miscRes] = await Promise.all([
+      supabase.from('invoices').select('*').eq('id', id).single(),
+      supabase.from('invoice_plot_items').select('*').eq('invoice_id', id).order('created_at'),
+      supabase.from('invoice_hourly_agreements').select('*, hourly_agreement:hourly_agreements(site_name, plot_name, hours, rate, descriptions, created_at)').eq('invoice_id', id),
+      supabase.from('invoice_misc_items').select('*').eq('invoice_id', id).order('created_at'),
+    ]);
+    if (invRes.error) throw invRes.error;
+    return { ...invRes.data, plot_items: plotRes.data || [], hourly_items: haRes.data || [], misc_items: miscRes.data || [] };
+  }
   const { data, error } = await supabase
     .from(sourceTable)
     .select('*')
@@ -461,6 +632,10 @@ export default function ActivityFeed() {
         return renderHourlyAgreementDetail(detailRecord, selectedItem.submitted_by);
       case 'Invoice':
         return renderInvoiceDetail(detailRecord, selectedItem.submitted_by);
+      case 'Issue Report':
+        return renderIssueReportDetail(detailRecord, selectedItem.submitted_by);
+      case 'Quality Report':
+        return renderQualityReportDetail(detailRecord, selectedItem.submitted_by);
       default:
         return renderGenericDetail(detailRecord, selectedItem.submitted_by);
     }
