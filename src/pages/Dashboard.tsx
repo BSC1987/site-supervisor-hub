@@ -168,36 +168,35 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Row 4: Site map + Top developers */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <SiteMap />
+      {/* Row 4: Site map */}
+      <SiteMap />
 
-        {stats.top_developers.length > 0 && (
-          <div className="border rounded-lg bg-card">
-            <div className="px-5 py-3 border-b border-border/60">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Top Developers by Units
-              </h2>
-            </div>
-            <div className="divide-y divide-border">
-              {stats.top_developers.map((d, i) => (
-                <div key={d.name} className="flex items-center gap-4 px-5 py-3">
-                  <span className="text-lg font-bold text-muted-foreground w-6 text-right">{i + 1}</span>
-                  <div className="flex-1">
-                    <span className="font-medium">{d.name}</span>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    {d.sites} site{d.sites !== 1 ? 's' : ''}
-                  </div>
-                  <div className="text-sm font-semibold w-20 text-right">
-                    {d.units} units
-                  </div>
-                </div>
-              ))}
-            </div>
+      {/* Row 5: Top developers */}
+      {stats.top_developers.length > 0 && (
+        <div className="border rounded-lg bg-card">
+          <div className="px-5 py-3 border-b border-border/60">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Top Developers by Units
+            </h2>
           </div>
-        )}
-      </div>
+          <div className="divide-y divide-border">
+            {stats.top_developers.map((d, i) => (
+              <div key={d.name} className="flex items-center gap-4 px-5 py-3">
+                <span className="text-lg font-bold text-muted-foreground w-6 text-right">{i + 1}</span>
+                <div className="flex-1">
+                  <span className="font-medium">{d.name}</span>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {d.sites} site{d.sites !== 1 ? 's' : ''}
+                </div>
+                <div className="text-sm font-semibold w-20 text-right">
+                  {d.units} units
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Row 6: Activity feed */}
       <ActivityFeed />
