@@ -33,19 +33,56 @@ function FitBounds({ sites }: { sites: SiteLocation[] }) {
   return null;
 }
 
-export default function SiteMapInner({ sites }: { sites: SiteLocation[] }) {
+function ToggleInteractions({ interactive }: { interactive: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    if (interactive) {
+      map.dragging.enable();
+      map.scrollWheelZoom.enable();
+      map.doubleClickZoom.enable();
+      map.touchZoom.enable();
+      map.boxZoom.enable();
+      map.keyboard.enable();
+      if (map.zoomControl) map.zoomControl.getContainer()!.style.display = '';
+    } else {
+      map.dragging.disable();
+      map.scrollWheelZoom.disable();
+      map.doubleClickZoom.disable();
+      map.touchZoom.disable();
+      map.boxZoom.disable();
+      map.keyboard.disable();
+      if (map.zoomControl) map.zoomControl.getContainer()!.style.display = 'none';
+    }
+  }, [map, interactive]);
+  return null;
+}
+
+export default function SiteMapInner({
+  sites,
+  interactive = true,
+}: {
+  sites: SiteLocation[];
+  interactive?: boolean;
+}) {
   return (
     <MapContainer
       center={UK_CENTER}
       zoom={DEFAULT_ZOOM}
       style={{ height: '100%', width: '100%' }}
-      scrollWheelZoom={true}
+      scrollWheelZoom={false}
+      dragging={false}
+      doubleClickZoom={false}
+      touchZoom={false}
+      boxZoom={false}
+      keyboard={false}
+      zoomControl={true}
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <FitBounds sites={sites} />
+      <ToggleInteractions interactive={interactive} />
       {sites.map((site) => (
         <Marker key={site.id} position={[site.lat, site.lng]}>
           <Popup>
