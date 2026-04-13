@@ -72,7 +72,7 @@ export default function SiteMap() {
     }
 
     const bounds = L.latLngBounds(sites.map((s) => [s.lat, s.lng] as [number, number]));
-    map.fitBounds(bounds, { paddingTopLeft: [10, 50], paddingBottomRight: [10, 10] });
+    map.fitBounds(bounds, { paddingTopLeft: [10, 25], paddingBottomRight: [10, 5] });
 
     mapRef.current = map;
 
