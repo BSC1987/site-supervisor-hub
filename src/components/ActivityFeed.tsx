@@ -6,10 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   AlertTriangle, Clock, CheckSquare, ClipboardCheck, FileText,
-  Filter, RefreshCw, Trash2,
+  Filter, RefreshCw, Trash2, ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -55,6 +54,18 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
+function formatDateTime(iso: string | null) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+}
+
+function formatCurrency(value: number | null) {
+  if (value == null) return '—';
+  return `£${Number(value).toFixed(2)}`;
+}
+
 const FORM_TYPE_CONFIG: Record<FormType, { icon: React.ElementType; colour: string }> = {
   'Issue Report':      { icon: AlertTriangle,  colour: 'text-red-400' },
   'Hourly Agreement':  { icon: Clock,          colour: 'text-amber-400' },
@@ -85,6 +96,141 @@ function statusBadge(status: string | null) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Detail field renderer                                              */
+/* ------------------------------------------------------------------ */
+
+function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
+  if (value == null || value === '' || value === '—') return null;
+  return (
+    <div>
+      <dt className="text-xs text-muted-foreground uppercase tracking-wide">{label}</dt>
+      <dd className="text-sm mt-0.5">{value}</dd>
+    </div>
+  );
+}
+
+function renderSignOffDetail(record: any, submittedBy: string) {
+  return (
+    <dl className="grid grid-cols-2 gap-x-6 gap-y-3">
+      <DetailField label="Reference" value={record.reference_number} />
+      <DetailField label="Submitted by" value={submittedBy} />
+      <DetailField label="Site" value={record.site_name} />
+      <DetailField label="Plot" value={record.plot_name} />
+      <DetailField label="Task type" value={record.task_type} />
+      <DetailField label="Manager" value={record.manager_name} />
+      <DetailField label="Manager email" value={record.manager_email} />
+      <DetailField label="Date" value={formatDateTime(record.created_at)} />
+      {record.notes && (
+        <div className="col-span-2">
+          <DetailField label="Notes" value={record.notes} />
+        </div>
+      )}
+    </dl>
+  );
+}
+
+function renderHourlyAgreementDetail(record: any, submittedBy: string) {
+  const descriptions = record.descriptions as string[] | null;
+  return (
+    <dl className="grid grid-cols-2 gap-x-6 gap-y-3">
+      <DetailField label="Reference" value={record.reference_number} />
+      <DetailField label="Submitted by" value={submittedBy} />
+      <DetailField label="Site" value={record.site_name} />
+      <DetailField label="Plot" value={record.plot_name} />
+      <DetailField label="Hours" value={record.hours} />
+      <DetailField label="Rate" value={formatCurrency(record.rate)} />
+      <DetailField label="Total" value={record.hours && record.rate ? formatCurrency(record.hours * record.rate) : '—'} />
+      <DetailField label="Invoiced" value={record.invoiced ? 'Yes' : 'No'} />
+      <DetailField label="Manager email" value={record.manager_email} />
+      <DetailField label="Date" value={formatDateTime(record.created_at)} />
+      {descriptions && descriptions.length > 0 && (
+        <div className="col-span-2">
+          <DetailField label="Descriptions" value={
+            <ul className="list-disc list-inside space-y-0.5">
+              {descriptions.map((d, i) => <li key={i}>{d}</li>)}
+            </ul>
+          } />
+        </div>
+      )}
+      {record.other_description && (
+        <div className="col-span-2">
+          <DetailField label="Other description" value={record.other_description} />
+        </div>
+      )}
+      {record.photo_urls && record.photo_urls.length > 0 && (
+        <div className="col-span-2">
+          <dt className="text-xs text-muted-foreground uppercase tracking-wide">Photos</dt>
+          <dd className="flex gap-2 mt-1 flex-wrap">
+            {(record.photo_urls as string[]).map((url, i) => (
+              <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
+                <img src={url} alt={`Photo ${i + 1}`} className="h-20 w-20 object-cover rounded border border-border" />
+              </a>
+            ))}
+          </dd>
+        </div>
+      )}
+    </dl>
+  );
+}
+
+function renderInvoiceDetail(record: any, submittedBy: string) {
+  return (
+    <dl className="grid grid-cols-2 gap-x-6 gap-y-3">
+      <DetailField label="Reference" value={record.reference_number} />
+      <DetailField label="Invoice #" value={record.invoice_number} />
+      <DetailField label="Submitted by" value={submittedBy} />
+      <DetailField label="Status" value={statusBadge(record.status)} />
+      <DetailField label="Total amount" value={formatCurrency(record.total_amount)} />
+      <DetailField label="Submitted at" value={formatDateTime(record.submitted_at)} />
+      <DetailField label="Created" value={formatDateTime(record.created_at)} />
+      {record.notes && (
+        <div className="col-span-2">
+          <DetailField label="Notes" value={record.notes} />
+        </div>
+      )}
+      {record.document_urls && record.document_urls.length > 0 && (
+        <div className="col-span-2">
+          <dt className="text-xs text-muted-foreground uppercase tracking-wide">Documents</dt>
+          <dd className="flex flex-col gap-1 mt-1">
+            {(record.document_urls as string[]).map((url, i) => (
+              <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                className="text-sm text-blue-400 hover:underline inline-flex items-center gap-1">
+                <ExternalLink className="h-3 w-3" />
+                Document {i + 1}
+              </a>
+            ))}
+          </dd>
+        </div>
+      )}
+    </dl>
+  );
+}
+
+function renderGenericDetail(record: any, submittedBy: string) {
+  // Fallback for issue_reports / quality_reports when those tables exist
+  return (
+    <dl className="grid grid-cols-2 gap-x-6 gap-y-3">
+      <DetailField label="Reference" value={record.reference_number} />
+      <DetailField label="Submitted by" value={submittedBy} />
+      <DetailField label="Site" value={record.site_name} />
+      <DetailField label="Plot" value={record.plot_name} />
+      <DetailField label="Status" value={statusBadge(record.status)} />
+      <DetailField label="Date" value={formatDateTime(record.created_at)} />
+      {record.notes && (
+        <div className="col-span-2">
+          <DetailField label="Notes" value={record.notes} />
+        </div>
+      )}
+      {record.description && (
+        <div className="col-span-2">
+          <DetailField label="Description" value={record.description} />
+        </div>
+      )}
+    </dl>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Data fetching                                                      */
 /* ------------------------------------------------------------------ */
 
@@ -109,12 +255,10 @@ async function fetchFeed(filters: {
   formType: string;
   siteId: string;
 }): Promise<FeedItem[]> {
-  // Pick which tables to query
   const tables = filters.formType === 'all'
     ? TABLE_CONFIG
     : TABLE_CONFIG.filter(t => t.formType === filters.formType);
 
-  // Query each table in parallel — allSettled so missing tables don't break the feed
   const results = await Promise.allSettled(
     tables.map(async (cfg) => {
       let query = supabase
@@ -132,7 +276,6 @@ async function fetchFeed(filters: {
     }),
   );
 
-  // Collect raw rows + gather unique user_ids
   const rawItems: { cfg: typeof TABLE_CONFIG[number]; row: RawRow }[] = [];
   const userIds = new Set<string>();
 
@@ -144,7 +287,6 @@ async function fetchFeed(filters: {
     }
   }
 
-  // Batch-resolve user names from profiles
   const nameMap = new Map<string, string>();
   if (userIds.size > 0) {
     const { data: profiles } = await supabase
@@ -157,7 +299,6 @@ async function fetchFeed(filters: {
     }
   }
 
-  // Build feed items
   const items: FeedItem[] = rawItems.map(({ cfg, row }) => ({
     id: row.id,
     form_type: cfg.formType,
@@ -169,9 +310,18 @@ async function fetchFeed(filters: {
     source_table: cfg.table,
   }));
 
-  // Sort newest first
   items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   return items;
+}
+
+async function fetchDetail(sourceTable: string, id: string): Promise<any> {
+  const { data, error } = await supabase
+    .from(sourceTable)
+    .select('*')
+    .eq('id', id)
+    .single();
+  if (error) throw error;
+  return data;
 }
 
 /* ------------------------------------------------------------------ */
@@ -179,7 +329,6 @@ async function fetchFeed(filters: {
 /* ------------------------------------------------------------------ */
 
 export default function ActivityFeed() {
-  const navigate = useNavigate();
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [formTypeFilter, setFormTypeFilter] = useState('all');
@@ -188,8 +337,15 @@ export default function ActivityFeed() {
   const [sites, setSites] = useState<Site[]>([]);
   const [developers, setDevelopers] = useState<Developer[]>([]);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  // Delete state
   const [confirmDelete, setConfirmDelete] = useState<FeedItem | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Detail state
+  const [selectedItem, setSelectedItem] = useState<FeedItem | null>(null);
+  const [detailRecord, setDetailRecord] = useState<any>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
 
   // Load filter options
   useEffect(() => {
@@ -234,40 +390,38 @@ export default function ActivityFeed() {
     loadFeed();
   }, [loadFeed]);
 
-  // Realtime subscriptions for all five tables
+  // Realtime subscriptions
   useEffect(() => {
     const tables = ['sign_offs', 'hourly_agreements', 'invoices', 'issue_reports', 'quality_reports'];
     const channel = supabase.channel('activity-feed');
 
     for (const table of tables) {
-      channel.on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table,
-      }, () => {
-        loadFeed();
-      });
-      channel.on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table,
-      }, () => {
-        loadFeed();
-      });
+      channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table }, () => loadFeed());
+      channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table }, () => loadFeed());
     }
 
     channel.subscribe();
     channelRef.current = channel;
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [loadFeed]);
 
-  const handleRowClick = (item: FeedItem) => {
-    navigate('/users');
+  // Open detail dialog
+  const handleRowClick = async (item: FeedItem) => {
+    setSelectedItem(item);
+    setDetailRecord(null);
+    setLoadingDetail(true);
+    try {
+      const record = await fetchDetail(item.source_table, item.id);
+      setDetailRecord(record);
+    } catch {
+      toast.error('Failed to load submission details');
+      setSelectedItem(null);
+    }
+    setLoadingDetail(false);
   };
 
+  // Delete handler
   const handleDelete = async () => {
     if (!confirmDelete) return;
     setDeleting(true);
@@ -283,6 +437,21 @@ export default function ActivityFeed() {
     toast.success(`${confirmDelete.form_type} deleted`);
     setConfirmDelete(null);
     setItems(prev => prev.filter(i => !(i.source_table === confirmDelete.source_table && i.id === confirmDelete.id)));
+  };
+
+  // Render detail content based on form type
+  const renderDetail = () => {
+    if (!selectedItem || !detailRecord) return null;
+    switch (selectedItem.form_type) {
+      case 'Sign Off':
+        return renderSignOffDetail(detailRecord, selectedItem.submitted_by);
+      case 'Hourly Agreement':
+        return renderHourlyAgreementDetail(detailRecord, selectedItem.submitted_by);
+      case 'Invoice':
+        return renderInvoiceDetail(detailRecord, selectedItem.submitted_by);
+      default:
+        return renderGenericDetail(detailRecord, selectedItem.submitted_by);
+    }
   };
 
   return (
@@ -402,6 +571,44 @@ export default function ActivityFeed() {
           );
         })}
       </div>
+
+      {/* Detail dialog */}
+      <Dialog open={!!selectedItem} onOpenChange={open => { if (!open) setSelectedItem(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedItem && (() => {
+                const cfg = FORM_TYPE_CONFIG[selectedItem.form_type];
+                const Icon = cfg.icon;
+                return <Icon className={`h-5 w-5 ${cfg.colour}`} />;
+              })()}
+              {selectedItem?.form_type}
+            </DialogTitle>
+          </DialogHeader>
+          {loadingDetail ? (
+            <div className="flex items-center justify-center py-8">
+              <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            renderDetail()
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedItem(null)}>Close</Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (selectedItem) {
+                  setSelectedItem(null);
+                  setConfirmDelete(selectedItem);
+                }
+              }}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete confirmation dialog */}
       <Dialog open={!!confirmDelete} onOpenChange={open => { if (!open) setConfirmDelete(null); }}>
