@@ -778,7 +778,7 @@ export default function ActivityFeed() {
               <th className="pl-5 pr-2 py-2.5 w-8">
                 <input
                   type="checkbox"
-                  className="rounded border-border cursor-pointer accent-primary"
+                  className="rounded border-border cursor-pointer accent-primary opacity-40 checked:opacity-100"
                   checked={items.length > 0 && selected.size === items.length}
                   onChange={toggleSelectAll}
                 />
@@ -820,7 +820,7 @@ export default function ActivityFeed() {
                   <td className="pl-5 pr-2 py-3" onClick={e => e.stopPropagation()}>
                     <input
                       type="checkbox"
-                      className="rounded border-border cursor-pointer accent-primary"
+                      className="rounded border-border cursor-pointer accent-primary opacity-40 checked:opacity-100"
                       checked={selected.has(itemKey(item))}
                       onChange={() => toggleSelect(item)}
                     />
