@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Loader2 } from 'lucide-react';
 
+const SiteMapInner = lazy(() => import('./SiteMapInner'));
+
 interface SiteLocation {
   id: string;
   name: string;
@@ -11,66 +13,6 @@ interface SiteLocation {
   lat: number;
   lng: number;
 }
-
-const UK_CENTER: [number, number] = [53.5, -2.5];
-const DEFAULT_ZOOM = 6;
-
-const LazyMap = lazy(() =>
-  import('react-leaflet').then((mod) =>
-    import('leaflet').then((L) => {
-      import('leaflet/dist/leaflet.css');
-      delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-      });
-
-      // Fit map bounds to show all markers
-      function FitBounds({ sites: s }: { sites: SiteLocation[] }) {
-        const map = mod.useMap();
-        useEffect(() => {
-          if (s.length === 0) return;
-          const bounds = L.latLngBounds(s.map((site) => [site.lat, site.lng]));
-          map.fitBounds(bounds, { padding: [30, 30] });
-        }, [map, s]);
-        return null;
-      }
-
-      const MapInner = ({ sites }: { sites: SiteLocation[] }) => (
-        <mod.MapContainer
-          center={UK_CENTER}
-          zoom={DEFAULT_ZOOM}
-          style={{ height: '100%', width: '100%' }}
-          scrollWheelZoom={true}
-        >
-          <mod.TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          <FitBounds sites={sites} />
-          {sites.map((site) => (
-            <mod.Marker key={site.id} position={[site.lat, site.lng]}>
-              <mod.Popup>
-                <div className="text-sm">
-                  <p className="font-semibold">{site.name}</p>
-                  {site.developer_name && (
-                    <p className="text-gray-600">{site.developer_name}</p>
-                  )}
-                  {site.address && (
-                    <p className="text-gray-500 text-xs mt-1">{site.address}</p>
-                  )}
-                </div>
-              </mod.Popup>
-            </mod.Marker>
-          ))}
-        </mod.MapContainer>
-      );
-
-      return { default: MapInner };
-    })
-  )
-);
 
 class MapErrorBoundary extends Component<
   { children: ReactNode },
@@ -152,7 +94,7 @@ export default function SiteMap() {
               </div>
             }
           >
-            <LazyMap sites={sites} />
+            <SiteMapInner sites={sites} />
           </Suspense>
         </MapErrorBoundary>
       </div>
