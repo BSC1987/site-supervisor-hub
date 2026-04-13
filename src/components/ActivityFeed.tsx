@@ -525,6 +525,11 @@ export default function ActivityFeed() {
   const [confirmDelete, setConfirmDelete] = useState<FeedItem | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Bulk select state
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
   // Detail state
   const [selectedItem, setSelectedItem] = useState<FeedItem | null>(null);
   const [detailRecord, setDetailRecord] = useState<any>(null);
@@ -626,6 +631,61 @@ export default function ActivityFeed() {
     setItems(prev => prev.filter(i => !(i.source_table === confirmDelete.source_table && i.id === confirmDelete.id)));
   };
 
+  const itemKey = (item: FeedItem) => `${item.source_table}:${item.id}`;
+
+  const toggleSelect = (item: FeedItem) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      const key = itemKey(item);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === items.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(items.map(itemKey)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    const selectedItems = items.filter(i => selected.has(itemKey(i)));
+
+    // Group by source table for efficient batch deletes
+    const grouped = new Map<string, string[]>();
+    for (const item of selectedItems) {
+      const ids = grouped.get(item.source_table) || [];
+      ids.push(item.id);
+      grouped.set(item.source_table, ids);
+    }
+
+    let failed = 0;
+    let invoiceLinked = 0;
+    for (const [table, ids] of grouped) {
+      const { error } = await supabase.from(table).delete().in('id', ids);
+      if (error) {
+        if (error.code === '23503') invoiceLinked += ids.length;
+        else failed += ids.length;
+      }
+    }
+
+    setBulkDeleting(false);
+    setConfirmBulkDelete(false);
+
+    if (invoiceLinked > 0) {
+      toast.error(`${invoiceLinked} item(s) are linked to invoices and could not be deleted`);
+    }
+    if (failed > 0) {
+      toast.error(`${failed} item(s) failed to delete`);
+    }
+
+    setSelected(new Set());
+    await loadFeed();
+  };
+
   // Render detail content based on form type
   const renderDetail = () => {
     if (!selectedItem || !detailRecord) return null;
@@ -654,6 +714,17 @@ export default function ActivityFeed() {
             Recent Submissions
           </h2>
           {loading && <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+          {selected.size > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setConfirmBulkDelete(true)}
+            >
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+              Delete {selected.size} selected
+            </Button>
+          )}
         </div>
 
         {/* Filters */}
@@ -705,7 +776,15 @@ export default function ActivityFeed() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/60">
-              <th className="px-5 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Type</th>
+              <th className="pl-5 pr-2 py-2.5 w-8">
+                <input
+                  type="checkbox"
+                  className="rounded border-border cursor-pointer accent-primary"
+                  checked={items.length > 0 && selected.size === items.length}
+                  onChange={toggleSelectAll}
+                />
+              </th>
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Type</th>
               <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Submitted by</th>
               <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Developer</th>
               <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Site</th>
@@ -717,7 +796,7 @@ export default function ActivityFeed() {
           <tbody className="divide-y divide-border">
             {!loading && items.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-5 py-8 text-center text-sm text-muted-foreground">
+                <td colSpan={8} className="px-5 py-8 text-center text-sm text-muted-foreground">
                   No submissions found
                 </td>
               </tr>
@@ -736,10 +815,18 @@ export default function ActivityFeed() {
                   key={`${item.source_table}-${item.id}`}
                   className={`cursor-pointer transition-colors hover:bg-muted/50 ${
                     isPending ? 'border-l-2 border-l-amber-500' : ''
-                  }`}
+                  } ${selected.has(itemKey(item)) ? 'bg-muted/30' : ''}`}
                   onClick={() => handleRowClick(item)}
                 >
-                  <td className="px-5 py-3">
+                  <td className="pl-5 pr-2 py-3" onClick={e => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      className="rounded border-border cursor-pointer accent-primary"
+                      checked={selected.has(itemKey(item))}
+                      onChange={() => toggleSelect(item)}
+                    />
+                  </td>
+                  <td className="px-3 py-3">
                     <div className="flex items-center gap-2">
                       <Icon className={`h-4 w-4 shrink-0 ${config.colour}`} />
                       <span className="font-medium whitespace-nowrap">{item.form_type}</span>
@@ -825,6 +912,25 @@ export default function ActivityFeed() {
             <Button variant="destructive" disabled={deleting} onClick={handleDelete}>
               <Trash2 className="mr-2 h-4 w-4" />
               {deleting ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk delete confirmation dialog */}
+      <Dialog open={confirmBulkDelete} onOpenChange={open => { if (!open) setConfirmBulkDelete(false); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {selected.size} Submissions</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Permanently delete <span className="font-medium text-foreground">{selected.size} selected submissions</span>? This cannot be undone. Items linked to invoices will be skipped.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmBulkDelete(false)} disabled={bulkDeleting}>Cancel</Button>
+            <Button variant="destructive" disabled={bulkDeleting} onClick={handleBulkDelete}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              {bulkDeleting ? 'Deleting...' : `Delete ${selected.size} items`}
             </Button>
           </DialogFooter>
         </DialogContent>
