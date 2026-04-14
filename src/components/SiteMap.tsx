@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { supabase } from '@/lib/supabase';
+import { useSupabaseQuery } from '@/hooks/useSupabaseQuery';
 import { Loader2 } from 'lucide-react';
 
 // Fix default marker icons (Leaflet + bundlers issue)
@@ -19,37 +20,33 @@ interface SiteLocation {
   lng: number;
 }
 
+type SiteRow = { id: string; name: string; latitude: number | null; longitude: number | null };
+
 export default function SiteMap() {
-  const [sites, setSites] = useState<SiteLocation[]>([]);
-  const [loading, setLoading] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      const { data, error } = await supabase
+  const { data, loading } = useSupabaseQuery<SiteRow[]>(
+    () =>
+      supabase
         .from('sites')
         .select('id, name, latitude, longitude')
         .eq('is_archived', false)
         .not('latitude', 'is', null)
-        .not('longitude', 'is', null);
+        .not('longitude', 'is', null),
+    [],
+  );
 
-      if (error || !data) {
-        setLoading(false);
-        return;
-      }
-
-      setSites(
-        data.map((s) => ({
-          id: s.id,
-          name: s.name,
-          lat: s.latitude as number,
-          lng: s.longitude as number,
-        }))
-      );
-      setLoading(false);
-    })();
-  }, []);
+  const sites = useMemo<SiteLocation[]>(
+    () =>
+      (data ?? []).map((s) => ({
+        id: s.id,
+        name: s.name,
+        lat: s.latitude as number,
+        lng: s.longitude as number,
+      })),
+    [data],
+  );
 
   useEffect(() => {
     if (loading || sites.length === 0 || !containerRef.current || mapRef.current) return;

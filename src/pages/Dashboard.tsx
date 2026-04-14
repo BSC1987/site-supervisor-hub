@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useSupabaseQuery } from '@/hooks/useSupabaseQuery';
 import {
   Building2, MapPin, Home, Users, HardHat, Paintbrush,
   Contact, PoundSterling, Warehouse, ClipboardList,
@@ -55,21 +56,14 @@ function StatCard({
 }
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: stats, loading, error } = useSupabaseQuery<Stats>(
+    () => supabase.rpc('get_dashboard_stats'),
+    [],
+  );
 
   useEffect(() => {
-    (async () => {
-      const { data, error } = await supabase.rpc('get_dashboard_stats');
-      if (error) {
-        toast.error('Failed to load dashboard: ' + error.message);
-        setLoading(false);
-        return;
-      }
-      setStats(data as Stats);
-      setLoading(false);
-    })();
-  }, []);
+    if (error) toast.error('Failed to load dashboard: ' + error.message);
+  }, [error]);
 
   if (loading) return <div className="text-muted-foreground">Loading dashboard…</div>;
   if (!stats) return null;
