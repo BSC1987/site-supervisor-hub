@@ -100,6 +100,14 @@ export interface CreateUserArgs {
   _rate: number;
 }
 
+/**
+ * Bump the current user's profiles.last_seen_at via the touch_last_seen RPC.
+ */
+export async function touchLastSeen(): Promise<void> {
+  const { error } = await supabase.rpc('touch_last_seen');
+  if (error) throw error;
+}
+
 export async function createUser(args: CreateUserArgs): Promise<void> {
   const { error } = await supabase.rpc('create_user', args);
   if (error) throw error;

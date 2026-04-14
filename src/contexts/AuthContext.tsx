@@ -7,6 +7,19 @@ import {
   getProfileActive,
   signOut as apiSignOut,
 } from '@/api/auth';
+import { touchLastSeen } from '@/api/users';
+
+const LAST_SEEN_STORAGE_KEY = 'lastSeenTouchedAt';
+const LAST_SEEN_THROTTLE_MS = 60 * 60 * 1000; // 1 hour
+
+function maybeTouchLastSeen() {
+  const prev = Number(localStorage.getItem(LAST_SEEN_STORAGE_KEY) ?? 0);
+  if (Date.now() - prev < LAST_SEEN_THROTTLE_MS) return;
+  localStorage.setItem(LAST_SEEN_STORAGE_KEY, String(Date.now()));
+  touchLastSeen().catch(() => {
+    localStorage.removeItem(LAST_SEEN_STORAGE_KEY);
+  });
+}
 
 interface AuthContextType {
   session: Session | null;
@@ -26,11 +39,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChange((session) => {
       setSession(session);
       setLoading(false);
+      if (session) maybeTouchLastSeen();
     });
 
     getSession().then((session) => {
       setSession(session);
       setLoading(false);
+      if (session) maybeTouchLastSeen();
     });
 
     return unsubscribe;

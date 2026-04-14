@@ -16,7 +16,7 @@ import {
   type SortKey,
   type SortDir,
 } from './types';
-import { capitalize, formatCurrency, fullName } from './utils';
+import { capitalize, formatCurrency, formatRelativeTime, fullName } from './utils';
 
 export function UserTable({ label, users, onSelect, onUpdate, onDelete, onToggleNotification }: {
   label: string;
@@ -41,6 +41,11 @@ export function UserTable({ label, users, onSelect, onUpdate, onDelete, onToggle
     if (sortKey === 'name') return dir * fullName(a).localeCompare(fullName(b));
     if (sortKey === 'role') return dir * (a.role ?? '').localeCompare(b.role ?? '');
     if (sortKey === 'rate') return dir * ((a.rate ?? 0) - (b.rate ?? 0));
+    if (sortKey === 'last_seen') {
+      const at = a.last_seen_at ? new Date(a.last_seen_at).getTime() : 0;
+      const bt = b.last_seen_at ? new Date(b.last_seen_at).getTime() : 0;
+      return dir * (at - bt);
+    }
     return 0;
   });
 
@@ -70,6 +75,9 @@ export function UserTable({ label, users, onSelect, onUpdate, onDelete, onToggle
                 Hourly Rate <SortIcon col="rate" />
               </TableHead>
               <TableHead className="h-9 text-center min-w-[100px]">Status</TableHead>
+              <TableHead className="h-9 cursor-pointer select-none text-center min-w-[110px]" onClick={() => toggleSort('last_seen')}>
+                Last Seen <SortIcon col="last_seen" />
+              </TableHead>
               {onToggleNotification && STAFF_NOTIFICATION_FIELDS.map(({ key, label }) => (
                 <TableHead key={key} className="h-9 text-center min-w-[100px]">{label}</TableHead>
               ))}
@@ -120,6 +128,9 @@ export function UserTable({ label, users, onSelect, onUpdate, onDelete, onToggle
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
+                </TableCell>
+                <TableCell className="py-2 text-center text-muted-foreground text-xs">
+                  {formatRelativeTime(u.last_seen_at)}
                 </TableCell>
                 {onToggleNotification && STAFF_NOTIFICATION_FIELDS.map(({ key }) => (
                   <TableCell key={key} className="py-2 text-center" onClick={e => e.stopPropagation()}>
