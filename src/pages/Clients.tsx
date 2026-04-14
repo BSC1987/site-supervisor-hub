@@ -12,7 +12,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
-import { Breadcrumbs, FieldConfig } from '@/components/EntityPage';
+import { Breadcrumbs } from '@/components/EntityPage';
 import { PlotPriceGrid } from '@/components/PlotPriceGrid';
 import { SiteContacts } from '@/components/SiteContacts';
 import { DeveloperContacts } from '@/components/DeveloperContacts';
@@ -25,8 +25,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-
-const SUPABASE_URL = 'https://xhqornncpcgewlbzutsd.supabase.co';
+import {
+  SUPABASE_URL,
+  developerFields,
+  siteFields,
+  type DrillState,
+  type DeveloperRow,
+  type SiteRow,
+} from '@/pages/clients/types';
 
 /**
  * Top-of-page editable site info panel for the admin layout. Loads the site row,
@@ -285,51 +291,11 @@ function SiteInfoPanel({
   );
 }
 
-const developerFields: FieldConfig[] = [
-  { key: 'name', label: 'Name', required: true },
-  { key: 'reg_number', label: 'Reg Number' },
-  { key: 'address_1', label: 'Address', required: true },
-  { key: 'city', label: 'City', required: true },
-  { key: 'county', label: 'County', required: true },
-  { key: 'post_code', label: 'Post Code', required: true },
-  { key: 'website', label: 'Website' },
-  { key: 'logo_url', label: 'Logo', type: 'image' },
-];
-
-const siteFields: FieldConfig[] = [
-  { key: 'name', label: 'Site Name', required: true },
-  { key: 'developer_id', label: 'Developer', type: 'select', foreignTable: 'developers', foreignLabel: 'name' },
-  { key: 'address', label: 'Address', required: true },
-  { key: 'grid_reference', label: 'Grid Reference' },
-  { key: 'latitude', label: 'Latitude' },
-  { key: 'longitude', label: 'Longitude' },
-  { key: 'site_plans', label: 'Site Plans', type: 'file', bucket: 'site-plans' },
-  { key: 'status', label: 'Status', type: 'select', options: [
-    { value: 'active', label: 'Active' },
-    { value: 'inactive', label: 'Inactive' },
-  ]},
-];
-
-interface DrillState {
-  developer?: { id: string; name: string };
-  site?: { id: string; name: string };
-}
-
 /**
  * Level 1 list. Custom layout: each row is just the developer name with Edit and
  * Archive actions. Archived developers are soft-deleted via the `is_archived`
  * column and shown in a collapsible section below the active list.
  */
-interface DeveloperRow {
-  id: string;
-  name: string;
-  is_archived: boolean;
-  logo_url?: string | null;
-  site_count: number;
-  unit_count: number;
-  [key: string]: unknown;
-}
-
 function DevelopersList({
   onOpen,
 }: {
@@ -627,15 +593,6 @@ function DevelopersList({
  * Level 2 list. Sites for one developer. Each row is just the site name with Edit
  * and Archive actions; archived sites are shown in a collapsible section.
  */
-interface SiteRow {
-  id: string;
-  name: string;
-  is_archived: boolean;
-  status?: string | null;
-  plot_count: number;
-  [key: string]: unknown;
-}
-
 function SitesList({
   developerId,
   onOpen,
