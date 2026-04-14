@@ -10,60 +10,19 @@ import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { BackToTop } from '@/components/BackToTop';
 import { Checkbox } from '@/components/ui/checkbox';
-
-type TaskType = 'internal' | 'garage' | 'external' | 'variation';
-
-interface Plot {
-  id: string;
-  plot_name: string;
-  house_type: string | null;
-  status: string;
-  sort_order: number;
-  is_archived: boolean;
-}
-
-interface ArchivedPlotEntry {
-  id: string;
-  plot_name: string;
-  sections: TaskType[];
-}
-
-interface Template {
-  id: string;
-  name: string;
-  type: 'internal' | 'garage' | 'external';
-  sort_order: number;
-}
-
-interface PlotTaskRow {
-  id: string;
-  plot_id: string;
-  task_template_id: string | null;
-  name: string;
-  type: TaskType;
-  sort_order: number;
-  price: number | null;
-  archived: boolean;
-}
-
-// Cell keys for template-backed cells use the template's UUID directly.
-// Custom (variation) cells use a "c:" prefix + type + name, which can't
-// collide with a UUID.
-const cellKey = (plotId: string, templateId: string) => `${plotId}:${templateId}`;
-const customKey = (plotId: string, type: TaskType, name: string) =>
-  `${plotId}:c:${type}:${name}`;
-
-function parsePastedGrid(text: string): string[][] {
-  const trimmed = text.replace(/\r\n?/g, '\n').replace(/\n+$/, '');
-  if (!trimmed) return [];
-  return trimmed.split('\n').map(r => r.split('\t'));
-}
-
-// Strip thousands separators and surrounding currency symbols / whitespace from a
-// numeric cell value so "£1,234.56" → "1234.56". Empty input passes through.
-function cleanNumericInput(raw: string): string {
-  return raw.replace(/[,£$\s]/g, '');
-}
+import type {
+  TaskType,
+  Plot,
+  ArchivedPlotEntry,
+  Template,
+  PlotTaskRow,
+} from '@/components/price-grid/types';
+import {
+  cellKey,
+  customKey,
+  parsePastedGrid,
+  cleanNumericInput,
+} from '@/components/price-grid/utils';
 
 interface Props {
   siteId: string;
