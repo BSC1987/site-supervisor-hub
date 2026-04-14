@@ -3,7 +3,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FileText, ChevronDown, Plus, ExternalLink, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,7 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { SUPABASE_URL } from './types';
+import { fetchSiteDetail, updateSite, uploadSitePlan } from '@/api/sites';
 
 /**
  * Top-of-page editable site info panel for the admin layout. Loads the site row,
@@ -41,25 +40,21 @@ export function SiteInfoPanel({
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('sites')
-        .select('name, address, grid_reference, latitude, longitude, site_plans')
-        .eq('id', siteId)
-        .single();
-      if (cancelled) return;
-      if (error) {
-        toast.error('Failed to load site: ' + error.message);
-        setLoading(false);
-        return;
+      try {
+        const data = await fetchSiteDetail(siteId);
+        if (cancelled) return;
+        setName(data?.name ?? '');
+        setAddress(data?.address ?? '');
+        setGridRef(data?.grid_reference ?? '');
+        setLatitude(data?.latitude != null ? String(data.latitude) : '');
+        setLongitude(data?.longitude != null ? String(data.longitude) : '');
+        const raw: string = data?.site_plans ?? '';
+        setPlans(raw ? raw.split('\n').filter(Boolean) : []);
+      } catch (err) {
+        if (cancelled) return;
+        toast.error('Failed to load site: ' + (err as Error).message);
       }
-      setName(data?.name ?? '');
-      setAddress(data?.address ?? '');
-      setGridRef(data?.grid_reference ?? '');
-      setLatitude(data?.latitude != null ? String(data.latitude) : '');
-      setLongitude(data?.longitude != null ? String(data.longitude) : '');
-      const raw: string = data?.site_plans ?? '';
-      setPlans(raw ? raw.split('\n').filter(Boolean) : []);
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     })();
     return () => {
       cancelled = true;
@@ -67,12 +62,13 @@ export function SiteInfoPanel({
   }, [siteId]);
 
   const saveField = async (column: string, value: string) => {
-    const { error } = await supabase.from('sites').update({ [column]: value }).eq('id', siteId);
-    if (error) {
-      toast.error('Save failed: ' + error.message);
+    try {
+      await updateSite(siteId, { [column]: value });
+      return true;
+    } catch (err) {
+      toast.error('Save failed: ' + (err as Error).message);
       return false;
     }
-    return true;
   };
 
   const handleNameBlur = async () => {
@@ -91,16 +87,22 @@ export function SiteInfoPanel({
     const val = latitude.trim();
     const num = val === '' ? null : parseFloat(val);
     if (val !== '' && (num === null || isNaN(num))) return;
-    const { error } = await supabase.from('sites').update({ latitude: num }).eq('id', siteId);
-    if (error) toast.error('Save failed: ' + error.message);
+    try {
+      await updateSite(siteId, { latitude: num });
+    } catch (err) {
+      toast.error('Save failed: ' + (err as Error).message);
+    }
   };
 
   const handleLngBlur = async () => {
     const val = longitude.trim();
     const num = val === '' ? null : parseFloat(val);
     if (val !== '' && (num === null || isNaN(num))) return;
-    const { error } = await supabase.from('sites').update({ longitude: num }).eq('id', siteId);
-    if (error) toast.error('Save failed: ' + error.message);
+    try {
+      await updateSite(siteId, { longitude: num });
+    } catch (err) {
+      toast.error('Save failed: ' + (err as Error).message);
+    }
   };
 
   const persistPlans = async (next: string[]) => {
@@ -121,14 +123,12 @@ export function SiteInfoPanel({
     if (files.length === 0) return;
     const uploaded: string[] = [];
     for (const file of files) {
-      const ext = file.name.split('.').pop();
-      const path = `sites/${siteId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const { error } = await supabase.storage.from('site-plans').upload(path, file, { upsert: true });
-      if (error) {
-        toast.error(`Upload failed for ${file.name}: ${error.message}`);
-        continue;
+      try {
+        const url = await uploadSitePlan(siteId, file);
+        uploaded.push(url);
+      } catch (err) {
+        toast.error(`Upload failed for ${file.name}: ${(err as Error).message}`);
       }
-      uploaded.push(`${SUPABASE_URL}/storage/v1/object/public/site-plans/${path}`);
     }
     if (uploaded.length > 0) {
       await persistPlans([...plans, ...uploaded]);

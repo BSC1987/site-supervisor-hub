@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { supabase } from '@/lib/supabase';
 import { useSupabaseQuery } from '@/hooks/useSupabaseQuery';
+import { fetchMappedSites, type SiteLocation as SiteRow } from '@/api/sites';
 import { Loader2 } from 'lucide-react';
 
 // Fix default marker icons (Leaflet + bundlers issue)
@@ -20,22 +20,11 @@ interface SiteLocation {
   lng: number;
 }
 
-type SiteRow = { id: string; name: string; latitude: number | null; longitude: number | null };
-
 export default function SiteMap() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
 
-  const { data, loading } = useSupabaseQuery<SiteRow[]>(
-    () =>
-      supabase
-        .from('sites')
-        .select('id, name, latitude, longitude')
-        .eq('is_archived', false)
-        .not('latitude', 'is', null)
-        .not('longitude', 'is', null),
-    [],
-  );
+  const { data, loading } = useSupabaseQuery<SiteRow[]>(fetchMappedSites, []);
 
   const sites = useMemo<SiteLocation[]>(
     () =>
