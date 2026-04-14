@@ -1,9 +1,14 @@
 import { useCallback } from 'react';
 import type { MutableRefObject } from 'react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
 import type { Plot, PlotTaskRow, Template } from './types';
-import { bulkInsertPlotsChunked, cellKey, cleanNumericInput, parsePastedGrid } from './utils';
+import { cellKey, cleanNumericInput, parsePastedGrid } from './utils';
+import {
+  bulkInsertPlotsChunked,
+  bulkUpsertPlotTasks,
+  fetchActivePlotTasksByPlotIds,
+  fetchAllPlotNamesBySite,
+} from '@/api/plots';
 
 export interface UsePasteHandlerProps {
   siteId: string;
@@ -57,17 +62,13 @@ export function usePasteHandler({
       // The unique (site_id, plot_name) constraint covers archived rows too. The
       // local `workingPlots` list only contains active plots, so we have to query
       // every plot_name on this site (including archived) to avoid collisions.
-      const { data: existingNamesData, error: existingErr } = await supabase
-        .from('plots')
-        .select('plot_name')
-        .eq('site_id', siteId);
-      if (existingErr) {
-        toast.error('Failed to check existing units: ' + existingErr.message);
+      let existingNames: Set<string>;
+      try {
+        existingNames = new Set(await fetchAllPlotNamesBySite(siteId));
+      } catch (err) {
+        toast.error('Failed to check existing units: ' + (err as Error).message);
         return;
       }
-      const existingNames = new Set(
-        (existingNamesData || []).map(r => (r as { plot_name: string }).plot_name)
-      );
       const numericNames = [...existingNames]
         .map(n => parseInt(n, 10))
         .filter(n => Number.isFinite(n));
@@ -111,16 +112,13 @@ export function usePasteHandler({
         // Pull them so taskIdsRef is populated and the upcoming persistCell calls take
         // the UPDATE branch instead of attempting a duplicate INSERT.
         const newPlotIds = (insertedPlots as Plot[]).map(p => p.id);
-        const { data: triggerTaskData, error: tasksErr } = await supabase
-          .from('plot_tasks')
-          .select('*')
-          .in('plot_id', newPlotIds)
-          .eq('archived', false);
-        if (tasksErr) {
-          toast.error('Failed to load tasks for new units: ' + tasksErr.message);
+        let triggerTasks: PlotTaskRow[];
+        try {
+          triggerTasks = await fetchActivePlotTasksByPlotIds(newPlotIds);
+        } catch (err) {
+          toast.error('Failed to load tasks for new units: ' + (err as Error).message);
           return;
         }
-        const triggerTasks = (triggerTaskData ?? []) as PlotTaskRow[];
 
         // Merge into local state + refs synchronously so the cell loop sees the new state.
         const mergedPlots = [...workingPlots, ...(insertedPlots as Plot[])];
@@ -226,14 +224,12 @@ export function usePasteHandler({
 
     // ---------- Step 3: single bulk upsert via RPC ----------
     console.log(`[paste] Upserting ${upsertRows.length} cells via bulk_upsert_plot_tasks RPC...`);
-    const { error: rpcError } = await supabase.rpc('bulk_upsert_plot_tasks', {
-      items: upsertRows,
-    });
-    if (rpcError) {
-      console.error(`[paste] RPC FAILED:`, rpcError);
-      toast.error('Bulk save failed: ' + rpcError.message);
-    } else {
+    try {
+      await bulkUpsertPlotTasks(upsertRows);
       console.log(`[paste] RPC OK — ${upsertRows.length} cells saved`);
+    } catch (err) {
+      console.error(`[paste] RPC FAILED:`, err);
+      toast.error('Bulk save failed: ' + (err as Error).message);
     }
 
     // ---------- Step 4: single refetch to resync grid ----------

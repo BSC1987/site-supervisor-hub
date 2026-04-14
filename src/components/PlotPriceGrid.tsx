@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,8 +17,32 @@ import {
   customKey,
   parsePastedGrid,
   cleanNumericInput,
-  bulkInsertPlotsChunked,
 } from '@/components/price-grid/utils';
+import {
+  fetchActivePlotsBySite,
+  fetchActiveTaskTemplates,
+  fetchActivePlotTasksByPlotIds,
+  fetchArchivedPlotsBySite,
+  fetchPlotTaskSections,
+  insertPlot,
+  updatePlotName,
+  updatePlotSortOrder,
+  archivePlot,
+  archivePlots,
+  restorePlot as apiRestorePlot,
+  deletePlot,
+  deletePlots,
+  bulkInsertPlotsChunked,
+  updatePlotTaskPrice,
+  insertPlotTask,
+  insertPlotTasks,
+  findPlotTaskByTemplate,
+  revivePlotTask,
+  softDeletePlotTask,
+  softDeletePlotTasks,
+  deletePlotTasksByPlot,
+  deletePlotTasksByPlots,
+} from '@/api/plots';
 import { usePasteHandler } from '@/components/price-grid/usePasteHandler';
 import {
   AddUnitDialog,
@@ -86,62 +109,40 @@ export function PlotPriceGrid({ siteId }: Props) {
 
   const fetchAll = async () => {
     setLoading(true);
-    const [plotsRes, tplRes] = await Promise.all([
-      supabase.from('plots').select('*').eq('site_id', siteId).eq('is_archived', false),
-      supabase
-        .from('task_templates')
-        .select('*')
-        .eq('archived', false)
-        .order('type', { ascending: true })
-        .order('sort_order', { ascending: true }),
+    const [plotsRes, tplRes] = await Promise.allSettled([
+      fetchActivePlotsBySite(siteId),
+      fetchActiveTaskTemplates(),
     ]);
-    if (plotsRes.error) {
-      toast.error('Units load failed: ' + plotsRes.error.message);
+    if (plotsRes.status === 'rejected') {
+      toast.error('Units load failed: ' + (plotsRes.reason as Error).message);
       setLoading(false);
       return;
     }
-    if (tplRes.error) {
-      toast.error('Templates load failed: ' + tplRes.error.message);
+    if (tplRes.status === 'rejected') {
+      toast.error('Templates load failed: ' + (tplRes.reason as Error).message);
       setLoading(false);
       return;
     }
-    const plotList = ((plotsRes.data || []) as Plot[]).slice();
+    const plotList = plotsRes.value.slice();
+    const templates = tplRes.value;
     // Primary sort by sort_order, then natural plot_name as a tiebreaker.
     plotList.sort((a, b) => {
       if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
       return a.plot_name.localeCompare(b.plot_name, undefined, { numeric: true, sensitivity: 'base' });
     });
     setPlots(plotList);
-    setTemplates((tplRes.data || []) as Template[]);
+    setTemplates(templates);
 
     if (plotList.length > 0) {
       const ids = plotList.map(p => p.id);
-      // Supabase's PostgREST max-rows (default 1000) silently caps .limit().
-      // Paginate to fetch ALL plot_tasks regardless of server config.
-      let allTaskData: PlotTaskRow[] = [];
-      let taskErr: { message: string } | null = null;
-      const PAGE = 1000;
-      for (let from = 0; ; from += PAGE) {
-        // eslint-disable-next-line no-await-in-loop
-        const { data: page, error: pageErr } = await supabase
-          .from('plot_tasks')
-          .select('*')
-          .in('plot_id', ids)
-          .eq('archived', false)
-          .order('id')
-          .range(from, from + PAGE - 1);
-        if (pageErr) { taskErr = pageErr; break; }
-        const rows = (page || []) as PlotTaskRow[];
-        allTaskData.push(...rows);
-        if (rows.length < PAGE) break; // last page
-      }
-      const taskData = allTaskData;
-      if (taskErr) {
-        toast.error('Tasks load failed: ' + taskErr.message);
+      let t: PlotTaskRow[];
+      try {
+        t = await fetchActivePlotTasksByPlotIds(ids);
+      } catch (err) {
+        toast.error('Tasks load failed: ' + (err as Error).message);
         setLoading(false);
         return;
       }
-      const t = (taskData || []) as PlotTaskRow[];
       console.log(`[fetchAll] returned ${t.length} plot_tasks rows for ${ids.length} plots`);
       if (t.length > 0) {
         console.log(`[fetchAll] first 5 rows:`, t.slice(0, 5));
@@ -188,11 +189,11 @@ export function PlotPriceGrid({ siteId }: Props) {
 
     const existingId = taskIdsRef.current[key];
     if (existingId) {
-      const { error } = await supabase
-        .from('plot_tasks')
-        .update({ price: numeric })
-        .eq('id', existingId);
-      if (error) toast.error('Save failed: ' + error.message);
+      try {
+        await updatePlotTaskPrice(existingId, numeric);
+      } catch (err) {
+        toast.error('Save failed: ' + (err as Error).message);
+      }
       return;
     }
     const sameType = tasksRef.current.filter(
@@ -206,18 +207,14 @@ export function PlotPriceGrid({ siteId }: Props) {
     // we can't use ON CONFLICT from the client — instead we catch 23505, find the
     // existing (possibly archived) row, and update it in place.
     let row: PlotTaskRow | null = null;
-    const insertRes = await supabase
-      .from('plot_tasks')
-      .insert({
-        plot_id: plotId,
-        task_template_id: template.id,
-        name: template.name,
-        type: template.type,
-        sort_order: nextOrder,
-        price: numeric,
-      })
-      .select()
-      .single();
+    const insertRes = await insertPlotTask({
+      plot_id: plotId,
+      task_template_id: template.id,
+      name: template.name,
+      type: template.type,
+      sort_order: nextOrder,
+      price: numeric,
+    });
     if (insertRes.error) {
       // 23505 = unique_violation. An archived row already exists for this cell —
       // revive it with the new price instead of creating a duplicate.
@@ -228,32 +225,27 @@ export function PlotPriceGrid({ siteId }: Props) {
         toast.error('Save failed: ' + insertRes.error.message);
         return;
       }
-      const { data: existing, error: findErr } = await supabase
-        .from('plot_tasks')
-        .select('*')
-        .eq('plot_id', plotId)
-        .eq('task_template_id', template.id)
-        .maybeSingle();
-      if (findErr || !existing) {
-        toast.error('Save failed: ' + (findErr?.message ?? 'conflict row not found'));
+      let existing: PlotTaskRow | null;
+      try {
+        existing = await findPlotTaskByTemplate(plotId, template.id);
+      } catch (err) {
+        toast.error('Save failed: ' + (err as Error).message);
         return;
       }
-      const { data: updated, error: updateErr } = await supabase
-        .from('plot_tasks')
-        .update({
+      if (!existing) {
+        toast.error('Save failed: conflict row not found');
+        return;
+      }
+      try {
+        row = await revivePlotTask(existing.id, {
           price: numeric,
-          archived: false,
           name: template.name,
           type: template.type,
-        })
-        .eq('id', (existing as PlotTaskRow).id)
-        .select()
-        .single();
-      if (updateErr || !updated) {
-        toast.error('Save failed: ' + (updateErr?.message ?? 'update failed'));
+        });
+      } catch (err) {
+        toast.error('Save failed: ' + (err as Error).message);
         return;
       }
-      row = updated as PlotTaskRow;
     } else if (insertRes.data) {
       row = insertRes.data as PlotTaskRow;
     }
@@ -288,12 +280,10 @@ export function PlotPriceGrid({ siteId }: Props) {
     if (numeric == null) {
       if (!existingId) return;
       // Soft delete: keep the row for reporting, hide it from the grid.
-      const { error } = await supabase
-        .from('plot_tasks')
-        .update({ archived: true, price: null })
-        .eq('id', existingId);
-      if (error) {
-        toast.error('Delete failed: ' + error.message);
+      try {
+        await softDeletePlotTask(existingId);
+      } catch (err) {
+        toast.error('Delete failed: ' + (err as Error).message);
         return;
       }
       const nextIds = { ...taskIdsRef.current };
@@ -311,11 +301,11 @@ export function PlotPriceGrid({ siteId }: Props) {
     }
 
     if (existingId) {
-      const { error } = await supabase
-        .from('plot_tasks')
-        .update({ price: numeric })
-        .eq('id', existingId);
-      if (error) toast.error('Save failed: ' + error.message);
+      try {
+        await updatePlotTaskPrice(existingId, numeric);
+      } catch (err) {
+        toast.error('Save failed: ' + (err as Error).message);
+      }
       return;
     }
 
@@ -333,18 +323,14 @@ export function PlotPriceGrid({ siteId }: Props) {
               .filter(t => t.type === type)
               .map(t => t.sort_order)
           ) + 1;
-    const { data, error } = await supabase
-      .from('plot_tasks')
-      .insert({
-        plot_id: plotId,
-        task_template_id: null,
-        name,
-        type,
-        sort_order: sortOrder,
-        price: numeric,
-      })
-      .select()
-      .single();
+    const { data, error } = await insertPlotTask({
+      plot_id: plotId,
+      task_template_id: null,
+      name,
+      type,
+      sort_order: sortOrder,
+      price: numeric,
+    });
     if (error) {
       toast.error('Save failed: ' + error.message);
       return;
@@ -461,9 +447,10 @@ export function PlotPriceGrid({ siteId }: Props) {
       price: priceNum,
     }));
 
-    const { error } = await supabase.from('plot_tasks').insert(rows);
-    if (error) {
-      toast.error('Failed to add variation: ' + error.message);
+    try {
+      await insertPlotTasks(rows);
+    } catch (err) {
+      toast.error('Failed to add variation: ' + (err as Error).message);
       return;
     }
     toast.success(
@@ -489,14 +476,15 @@ export function PlotPriceGrid({ siteId }: Props) {
       plotsRef.current.length > 0
         ? Math.max(...plotsRef.current.map(p => p.sort_order)) + 1
         : 1;
-    const { error } = await supabase.from('plots').insert({
-      site_id: siteId,
-      plot_name: name,
-      status: 'not_started',
-      sort_order: nextSort,
-    });
-    if (error) {
-      toast.error('Add failed: ' + error.message);
+    try {
+      await insertPlot({
+        site_id: siteId,
+        plot_name: name,
+        status: 'not_started',
+        sort_order: nextSort,
+      });
+    } catch (err) {
+      toast.error('Add failed: ' + (err as Error).message);
       return;
     }
     toast.success('Unit added');
@@ -511,12 +499,10 @@ export function PlotPriceGrid({ siteId }: Props) {
     setPlotToDelete(null);
     // Soft delete: keep the plot row and its plot_tasks intact so restoring brings
     // everything back exactly as it was. Hidden from the grid via is_archived filter.
-    const { error } = await supabase
-      .from('plots')
-      .update({ is_archived: true })
-      .eq('id', target.id);
-    if (error) {
-      toast.error('Delete failed: ' + error.message);
+    try {
+      await archivePlot(target.id);
+    } catch (err) {
+      toast.error('Delete failed: ' + (err as Error).message);
       return;
     }
     toast.success(`Unit ${target.plot_name} archived`);
@@ -546,17 +532,14 @@ export function PlotPriceGrid({ siteId }: Props) {
 
   const fetchArchivedPlots = async () => {
     setArchivedLoading(true);
-    const { data: plotData, error: plotErr } = await supabase
-      .from('plots')
-      .select('id, plot_name, sort_order')
-      .eq('site_id', siteId)
-      .eq('is_archived', true);
-    if (plotErr) {
-      toast.error('Failed to load archived units: ' + plotErr.message);
+    let rows: Array<{ id: string; plot_name: string; sort_order: number }>;
+    try {
+      rows = await fetchArchivedPlotsBySite(siteId);
+    } catch (err) {
+      toast.error('Failed to load archived units: ' + (err as Error).message);
       setArchivedLoading(false);
       return;
     }
-    const rows = (plotData || []) as Array<{ id: string; plot_name: string; sort_order: number }>;
     if (rows.length === 0) {
       setArchivedPlots([]);
       setArchivedLoading(false);
@@ -565,17 +548,16 @@ export function PlotPriceGrid({ siteId }: Props) {
     // For each archived plot, list the sections (task types) it has any tasks in.
     // We include both active and archived plot_tasks so a plot retains its history.
     const ids = rows.map(r => r.id);
-    const { data: taskData, error: taskErr } = await supabase
-      .from('plot_tasks')
-      .select('plot_id, type')
-      .in('plot_id', ids);
-    if (taskErr) {
-      toast.error('Failed to load task sections: ' + taskErr.message);
+    let taskData: Array<{ plot_id: string; type: TaskType }>;
+    try {
+      taskData = await fetchPlotTaskSections(ids);
+    } catch (err) {
+      toast.error('Failed to load task sections: ' + (err as Error).message);
       setArchivedLoading(false);
       return;
     }
     const sectionsByPlot = new Map<string, Set<TaskType>>();
-    for (const t of (taskData || []) as Array<{ plot_id: string; type: TaskType }>) {
+    for (const t of taskData) {
       const set = sectionsByPlot.get(t.plot_id) ?? new Set<TaskType>();
       set.add(t.type);
       sectionsByPlot.set(t.plot_id, set);
@@ -602,12 +584,10 @@ export function PlotPriceGrid({ siteId }: Props) {
   };
 
   const restorePlot = async (plotId: string) => {
-    const { error } = await supabase
-      .from('plots')
-      .update({ is_archived: false })
-      .eq('id', plotId);
-    if (error) {
-      toast.error('Restore failed: ' + error.message);
+    try {
+      await apiRestorePlot(plotId);
+    } catch (err) {
+      toast.error('Restore failed: ' + (err as Error).message);
       return;
     }
     toast.success('Unit restored');
@@ -635,12 +615,10 @@ export function PlotPriceGrid({ siteId }: Props) {
       return;
     }
     if (original != null && name === original) return;
-    const { error } = await supabase
-      .from('plots')
-      .update({ plot_name: name })
-      .eq('id', plotId);
-    if (error) {
-      toast.error('Rename failed: ' + error.message);
+    try {
+      await updatePlotName(plotId, name);
+    } catch (err) {
+      toast.error('Rename failed: ' + (err as Error).message);
       return;
     }
     const updated = plotsRef.current.map(p =>
@@ -737,14 +715,15 @@ export function PlotPriceGrid({ siteId }: Props) {
       if (wasInserted) continue;
       target.plot_name = names[r];
       renames.push(
-        Promise.resolve(
-          supabase.from('plots').update({ plot_name: names[r] }).eq('id', target.id)
-        )
+        updatePlotName(target.id, names[r]).then(
+          () => ({ ok: true }),
+          () => ({ ok: false }),
+        ),
       );
     }
     if (renames.length > 0) {
       const results = await Promise.all(renames);
-      const failed = results.filter(res => (res as { error?: unknown })?.error).length;
+      const failed = results.filter(res => !(res as { ok: boolean }).ok).length;
       if (failed > 0) toast.error(`${failed} unit rename${failed === 1 ? '' : 's'} failed`);
     }
 
@@ -773,12 +752,10 @@ export function PlotPriceGrid({ siteId }: Props) {
       toast.error('No rows to delete');
       return;
     }
-    const { error } = await supabase
-      .from('plot_tasks')
-      .update({ archived: true, price: null })
-      .in('id', ids);
-    if (error) {
-      toast.error('Delete failed: ' + error.message);
+    try {
+      await softDeletePlotTasks(ids);
+    } catch (err) {
+      toast.error('Delete failed: ' + (err as Error).message);
       return;
     }
     toast.success(`Removed variation "${name}"`);
@@ -805,17 +782,16 @@ export function PlotPriceGrid({ siteId }: Props) {
     const target = plotToHardDelete;
     setPlotToHardDelete(null);
     // Delete child tasks first so we don't depend on FK cascade behaviour.
-    const { error: tasksErr } = await supabase
-      .from('plot_tasks')
-      .delete()
-      .eq('plot_id', target.id);
-    if (tasksErr) {
-      toast.error('Failed to delete tasks: ' + tasksErr.message);
+    try {
+      await deletePlotTasksByPlot(target.id);
+    } catch (err) {
+      toast.error('Failed to delete tasks: ' + (err as Error).message);
       return;
     }
-    const { error } = await supabase.from('plots').delete().eq('id', target.id);
-    if (error) {
-      toast.error('Delete failed: ' + error.message);
+    try {
+      await deletePlot(target.id);
+    } catch (err) {
+      toast.error('Delete failed: ' + (err as Error).message);
       return;
     }
     toast.success(`Unit ${target.plot_name} deleted`);
@@ -843,12 +819,10 @@ export function PlotPriceGrid({ siteId }: Props) {
   const handleBulkArchive = async () => {
     const ids = Array.from(selectedPlotIds);
     if (ids.length === 0) return;
-    const { error } = await supabase
-      .from('plots')
-      .update({ is_archived: true })
-      .in('id', ids);
-    if (error) {
-      toast.error('Bulk archive failed: ' + error.message);
+    try {
+      await archivePlots(ids);
+    } catch (err) {
+      toast.error('Bulk archive failed: ' + (err as Error).message);
       return;
     }
     toast.success(`Archived ${ids.length} unit${ids.length === 1 ? '' : 's'}`);
@@ -861,17 +835,16 @@ export function PlotPriceGrid({ siteId }: Props) {
     setBulkDeleteOpen(false);
     if (ids.length === 0) return;
     // Delete child tasks first so we don't depend on FK cascade behaviour.
-    const { error: tasksErr } = await supabase
-      .from('plot_tasks')
-      .delete()
-      .in('plot_id', ids);
-    if (tasksErr) {
-      toast.error('Failed to delete tasks: ' + tasksErr.message);
+    try {
+      await deletePlotTasksByPlots(ids);
+    } catch (err) {
+      toast.error('Failed to delete tasks: ' + (err as Error).message);
       return;
     }
-    const { error } = await supabase.from('plots').delete().in('id', ids);
-    if (error) {
-      toast.error('Bulk delete failed: ' + error.message);
+    try {
+      await deletePlots(ids);
+    } catch (err) {
+      toast.error('Bulk delete failed: ' + (err as Error).message);
       return;
     }
     toast.success(`Deleted ${ids.length} unit${ids.length === 1 ? '' : 's'}`);
@@ -903,8 +876,8 @@ export function PlotPriceGrid({ siteId }: Props) {
     plotsRef.current = next;
     setPlots(next);
     const [r1, r2] = await Promise.all([
-      supabase.from('plots').update({ sort_order: b }).eq('id', plot.id),
-      supabase.from('plots').update({ sort_order: a }).eq('id', swap.id),
+      updatePlotSortOrder(plot.id, b),
+      updatePlotSortOrder(swap.id, a),
     ]);
     if (r1.error || r2.error) {
       toast.error('Reorder failed');
