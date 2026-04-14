@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -19,7 +18,13 @@ import {
   renderInvoiceDetail,
   renderGenericDetail,
 } from '@/components/activity-feed/DetailRenderers';
-import { fetchFeed, fetchDetail } from '@/components/activity-feed/fetchFeed';
+import {
+  fetchFeed,
+  fetchDetail,
+  fetchActivityFilterOptions,
+  deleteActivityItem,
+  subscribeToActivityChanges,
+} from '@/api/activity';
 
 
 
@@ -37,7 +42,6 @@ export default function ActivityFeed() {
   const [sites, setSites] = useState<Site[]>([]);
   const [developers, setDevelopers] = useState<Developer[]>([]);
   const [page, setPage] = useState(0);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const PAGE_SIZE = 100;
 
   // Delete state
@@ -53,12 +57,9 @@ export default function ActivityFeed() {
   // Load filter options
   useEffect(() => {
     (async () => {
-      const [siteRes, devRes] = await Promise.all([
-        supabase.from('sites').select('id, name, developer_id').eq('status', 'active').order('name'),
-        supabase.from('developers').select('id, name').eq('is_archived', false).order('name'),
-      ]);
-      if (siteRes.data) setSites(siteRes.data as Site[]);
-      if (devRes.data) setDevelopers(devRes.data as Developer[]);
+      const { sites, developers } = await fetchActivityFilterOptions();
+      setSites(sites);
+      setDevelopers(developers);
     })();
   }, []);
 
@@ -120,18 +121,7 @@ export default function ActivityFeed() {
 
   // Realtime subscriptions
   useEffect(() => {
-    const tables = ['sign_offs', 'hourly_agreements', 'invoices', 'issue_report_submissions', 'quality_report_submissions'];
-    const channel = supabase.channel('activity-feed');
-
-    for (const table of tables) {
-      channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table }, () => loadFeed());
-      channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table }, () => loadFeed());
-    }
-
-    channel.subscribe();
-    channelRef.current = channel;
-
-    return () => { supabase.removeChannel(channel); };
+    return subscribeToActivityChanges(() => loadFeed());
   }, [loadFeed]);
 
   // Open detail dialog
@@ -153,19 +143,19 @@ export default function ActivityFeed() {
   const handleDelete = async () => {
     if (!confirmDelete) return;
     setDeleting(true);
-    const { error } = await supabase
-      .from(confirmDelete.source_table)
-      .delete()
-      .eq('id', confirmDelete.id);
-    setDeleting(false);
-    if (error) {
-      if (error.code === '23503') {
+    try {
+      await deleteActivityItem(confirmDelete.source_table, confirmDelete.id);
+    } catch (err) {
+      setDeleting(false);
+      const e = err as { code?: string; message: string };
+      if (e.code === '23503') {
         toast.error('This submission is linked to an invoice and cannot be deleted');
       } else {
-        toast.error('Failed to delete: ' + error.message);
+        toast.error('Failed to delete: ' + e.message);
       }
       return;
     }
+    setDeleting(false);
     toast.success(`${confirmDelete.form_type} deleted`);
     setConfirmDelete(null);
     setItems(prev => prev.filter(i => !(i.source_table === confirmDelete.source_table && i.id === confirmDelete.id)));

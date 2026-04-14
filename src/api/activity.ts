@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import type { FeedItem, FormType } from './types';
+import type { Developer, FeedItem, FormType, Site } from '@/components/activity-feed/types';
 
 interface RawRow {
   id: string;
@@ -21,6 +21,8 @@ const TABLE_CONFIG: { table: string; formType: FormType; select: string; hasStat
   { table: 'issue_report_submissions',   formType: 'Issue Report',     select: 'id, submitted_by, site_id, site:sites(name), plot:plots(plot_name), created_at', hasStatus: false, hasSite: true,  userIdField: 'submitted_by' },
   { table: 'quality_report_submissions', formType: 'Quality Report',   select: 'id, submitted_by, site_id, site_name, plot_name, created_at',   hasStatus: false, hasSite: true,  userIdField: 'submitted_by' },
 ];
+
+const ACTIVITY_TABLES = TABLE_CONFIG.map(c => c.table);
 
 export async function fetchFeed(filters: {
   formType: string;
@@ -119,4 +121,48 @@ export async function fetchDetail(sourceTable: string, id: string): Promise<any>
     .single();
   if (error) throw error;
   return data;
+}
+
+export interface ActivityFilterOptions {
+  sites: Site[];
+  developers: Developer[];
+}
+
+/**
+ * Load the dropdown options for the activity-feed filters: active sites and
+ * non-archived developers. Errors fall back to empty lists (matching prior
+ * inline behaviour, which silently ignored failures).
+ */
+export async function fetchActivityFilterOptions(): Promise<ActivityFilterOptions> {
+  const [siteRes, devRes] = await Promise.all([
+    supabase.from('sites').select('id, name, developer_id').eq('status', 'active').order('name'),
+    supabase.from('developers').select('id, name').eq('is_archived', false).order('name'),
+  ]);
+  return {
+    sites: (siteRes.data ?? []) as Site[],
+    developers: (devRes.data ?? []) as Developer[],
+  };
+}
+
+/**
+ * Delete an activity-feed row by source table + id. Throws the raw Supabase
+ * error so callers can inspect `.code` (e.g. '23503' = invoice FK violation).
+ */
+export async function deleteActivityItem(sourceTable: string, id: string): Promise<void> {
+  const { error } = await supabase.from(sourceTable).delete().eq('id', id);
+  if (error) throw error;
+}
+
+/**
+ * Subscribe to INSERT/UPDATE postgres-changes events on every activity
+ * source table. Returns the unsubscribe function.
+ */
+export function subscribeToActivityChanges(onChange: () => void): () => void {
+  const channel = supabase.channel('activity-feed');
+  for (const table of ACTIVITY_TABLES) {
+    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table }, onChange);
+    channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table }, onChange);
+  }
+  channel.subscribe();
+  return () => { supabase.removeChannel(channel); };
 }
