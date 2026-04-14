@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { supabase } from '@/lib/supabase';
+import { countPendingProfiles, subscribeToPendingProfileChanges } from '@/api/users';
 
 interface PendingUsersContextValue {
   pendingCount: number;
@@ -15,11 +15,8 @@ export function PendingUsersProvider({ children }: { children: ReactNode }) {
   const [pendingCount, setPendingCount] = useState(0);
 
   const refreshPendingCount = useCallback(async () => {
-    const { count, error } = await supabase
-      .from('profiles')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending');
-    if (!error && count != null) setPendingCount(count);
+    const count = await countPendingProfiles();
+    if (count != null) setPendingCount(count);
   }, []);
 
   useEffect(() => {
@@ -29,21 +26,13 @@ export function PendingUsersProvider({ children }: { children: ReactNode }) {
     const interval = setInterval(refreshPendingCount, 30_000);
 
     // Also subscribe to realtime changes on profiles table
-    const channel = supabase
-      .channel('pending-users')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'profiles',
-        filter: 'status=eq.pending',
-      }, () => {
-        refreshPendingCount();
-      })
-      .subscribe();
+    const unsubscribe = subscribeToPendingProfileChanges(() => {
+      refreshPendingCount();
+    });
 
     return () => {
       clearInterval(interval);
-      supabase.removeChannel(channel);
+      unsubscribe();
     };
   }, [refreshPendingCount]);
 

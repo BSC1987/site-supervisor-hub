@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,6 +19,18 @@ import {
   formatPostCode,
 } from '@/pages/users/utils';
 import { UserDetail } from '@/pages/users/UserDetail';
+import {
+  fetchActiveProfiles,
+  fetchUserRoles,
+  fetchPendingProfiles,
+  toggleUserActive,
+  updateUserRole,
+  insertUserRole,
+  updateProfile,
+  createUser,
+  updatePendingUserStatus,
+  hardDeleteUser,
+} from '@/api/users';
 import { PendingSection } from '@/pages/users/PendingSection';
 import { UserTable } from '@/pages/users/UserTable';
 
@@ -44,30 +55,35 @@ export default function Users() {
 
   const fetchUsers = async () => {
     setLoading(true);
-    const [profilesRes, rolesRes, pendingRes] = await Promise.all([
-      supabase.from('profiles').select('*').or('status.eq.approved,status.is.null'),
-      supabase.from('user_roles').select('*'),
-      supabase.from('profiles')
-        .select('id, user_id, first_name, last_name, email, phone, sort_code, account_number, national_insurance_number, utr_number, created_at')
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false }),
+    const [profilesRes, rolesRes, pendingRes] = await Promise.allSettled([
+      fetchActiveProfiles(),
+      fetchUserRoles(),
+      fetchPendingProfiles(),
     ]);
 
-    if (profilesRes.error) { toast.error('Failed to load profiles: ' + profilesRes.error.message); setLoading(false); return; }
-    if (rolesRes.error) { toast.error('Failed to load roles: ' + rolesRes.error.message); setLoading(false); return; }
+    if (profilesRes.status === 'rejected') {
+      toast.error('Failed to load profiles: ' + (profilesRes.reason as Error).message);
+      setLoading(false);
+      return;
+    }
+    if (rolesRes.status === 'rejected') {
+      toast.error('Failed to load roles: ' + (rolesRes.reason as Error).message);
+      setLoading(false);
+      return;
+    }
 
     const roleMap = new Map<string, { role: string; rate: number; id: string }>();
-    for (const r of rolesRes.data || []) {
+    for (const r of rolesRes.value) {
       roleMap.set(r.user_id, { role: r.role, rate: r.rate, id: r.id });
     }
 
-    const merged: UserRow[] = (profilesRes.data || []).map((p: any) => {
+    const merged: UserRow[] = profilesRes.value.map((p: any) => {
       const r = roleMap.get(p.user_id);
       return { ...p, role: r?.role ?? null, rate: r?.rate ?? null, role_id: r?.id ?? null };
     });
 
     setUsers(merged);
-    setPendingUsers((pendingRes.data || []) as PendingUser[]);
+    setPendingUsers(pendingRes.status === 'fulfilled' ? pendingRes.value : []);
     setLoading(false);
   };
 
@@ -82,16 +98,12 @@ export default function Users() {
     const updated = { ...user, is_active };
     setUsers(prev => prev.map(u => u.id === user.id ? updated : u));
 
-    const { error } = await supabase.rpc('toggle_user_active', {
-      _user_id: user.user_id,
-      _is_active: is_active,
-    });
-
-    if (error) {
+    try {
+      await toggleUserActive(user.user_id, is_active);
+      toast.success(is_active ? 'User restored' : 'User deactivated');
+    } catch {
       toast.error('Failed to update status');
       setUsers(prev => prev.map(u => u.id === user.id ? user : u));
-    } else {
-      toast.success(is_active ? 'User restored' : 'User deactivated');
     }
   };
 
@@ -105,10 +117,13 @@ export default function Users() {
       const updated = { ...user, ...patch };
       setUsers(prev => prev.map(u => u.id === user.id ? updated : u));
 
-      const res = user.role_id
-        ? await supabase.from('user_roles').update({ role: patch.role }).eq('id', user.role_id)
-        : await supabase.from('user_roles').insert({ user_id: user.user_id, role: patch.role, rate: user.rate ?? 18 });
-      if (res.error) {
+      try {
+        if (user.role_id) {
+          await updateUserRole(user.role_id, { role: patch.role });
+        } else {
+          await insertUserRole({ user_id: user.user_id, role: patch.role, rate: user.rate ?? 18 });
+        }
+      } catch {
         toast.error('Failed to update role');
         setUsers(prev => prev.map(u => u.id === user.id ? user : u));
       }
@@ -117,11 +132,9 @@ export default function Users() {
 
   const handleToggleNotification = async (user: UserRow, field: typeof STAFF_NOTIFICATION_FIELDS[number]['key'], value: boolean) => {
     setUsers(prev => prev.map(u => u.id === user.id ? { ...u, [field]: value } : u));
-    const { error } = await supabase
-      .from('profiles')
-      .update({ [field]: value })
-      .eq('id', user.id);
-    if (error) {
+    try {
+      await updateProfile(user.id, { [field]: value });
+    } catch {
       toast.error('Failed to update notification preference');
       setUsers(prev => prev.map(u => u.id === user.id ? user : u));
     }
@@ -136,47 +149,44 @@ export default function Users() {
       return;
     }
     setAddSaving(true);
-    const { error } = await supabase.rpc('create_user', {
-      _email: email,
-      _password: addForm.password,
-      _first_name: first,
-      _last_name: last,
-      _phone: addForm.phone.trim() ? formatPhone(addForm.phone.trim()) : null,
-      _post_code: addForm.post_code.trim() ? formatPostCode(addForm.post_code.trim()) : null,
-      _sort_code: addForm.sort_code.trim() || null,
-      _account_number: addForm.account_number.trim() || null,
-      _national_insurance_number: addForm.national_insurance_number.trim().toUpperCase() || null,
-      _utr_number: addForm.utr_number.trim() || null,
-      _role: addForm.role,
-      _rate: parseFloat(addForm.rate) || 18,
-    });
-    if (error) {
-      toast.error('Failed to create user: ' + error.message);
-    } else {
+    try {
+      await createUser({
+        _email: email,
+        _password: addForm.password,
+        _first_name: first,
+        _last_name: last,
+        _phone: addForm.phone.trim() ? formatPhone(addForm.phone.trim()) : null,
+        _post_code: addForm.post_code.trim() ? formatPostCode(addForm.post_code.trim()) : null,
+        _sort_code: addForm.sort_code.trim() || null,
+        _account_number: addForm.account_number.trim() || null,
+        _national_insurance_number: addForm.national_insurance_number.trim().toUpperCase() || null,
+        _utr_number: addForm.utr_number.trim() || null,
+        _role: addForm.role,
+        _rate: parseFloat(addForm.rate) || 18,
+      });
       toast.success('User created');
       setAddOpen(false);
       setAddForm({ first_name: '', last_name: '', email: '', password: '', phone: '', post_code: '', sort_code: '', account_number: '', national_insurance_number: '', utr_number: '', role: 'decorator', rate: '18' });
       fetchUsers();
+    } catch (err) {
+      toast.error('Failed to create user: ' + (err as Error).message);
     }
     setAddSaving(false);
   };
 
   const handlePendingAction = async (userId: string, status: 'approved' | 'rejected') => {
-    const { error } = await supabase.rpc('update_user_status', {
-      target_user_id: userId,
-      new_status: status,
-    });
-    if (error) {
-      toast.error('Failed to update status: ' + error.message);
+    try {
+      await updatePendingUserStatus(userId, status);
+    } catch (err) {
+      toast.error('Failed to update status: ' + (err as Error).message);
       return;
     }
     if (status === 'approved') {
-      const { error: roleErr } = await supabase.from('user_roles').insert({
-        user_id: userId,
-        role: 'decorator',
-        rate: 18,
-      });
-      if (roleErr) toast.error('Approved but failed to assign role: ' + roleErr.message);
+      try {
+        await insertUserRole({ user_id: userId, role: 'decorator', rate: 18 });
+      } catch (err) {
+        toast.error('Approved but failed to assign role: ' + (err as Error).message);
+      }
     }
     toast.success(status === 'approved' ? 'User approved as decorator' : 'User rejected');
     fetchUsers();
@@ -184,25 +194,23 @@ export default function Users() {
   };
 
   const handleDeletePending = async (userId: string) => {
-    const { error } = await supabase.rpc('hard_delete_user', { _user_id: userId });
-    if (error) {
-      toast.error('Failed to delete user: ' + error.message);
-    } else {
+    try {
+      await hardDeleteUser(userId);
       toast.success('User rejected and deleted');
       fetchUsers();
       refreshPendingCount();
+    } catch (err) {
+      toast.error('Failed to delete user: ' + (err as Error).message);
     }
   };
 
   const handleDeleteUser = async (user: UserRow) => {
-    const { error } = await supabase.rpc('hard_delete_user', {
-      _user_id: user.user_id,
-    });
-    if (error) {
-      toast.error('Failed to delete user: ' + error.message);
-    } else {
+    try {
+      await hardDeleteUser(user.user_id);
       toast.success('User deleted');
       setUsers(prev => prev.filter(u => u.id !== user.id));
+    } catch (err) {
+      toast.error('Failed to delete user: ' + (err as Error).message);
     }
   };
 

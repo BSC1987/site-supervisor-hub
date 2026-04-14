@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -27,6 +26,14 @@ import {
   formatDate,
   formatDateTime,
 } from './utils';
+import {
+  fetchUserSignOffs,
+  fetchUserHourlyAgreements,
+  fetchUserInvoices,
+  updateProfile,
+  updateUserRole,
+  insertUserRole,
+} from '@/api/users';
 
 export function UserDetail({ user, onBack, onSaved }: {
   user: UserRow;
@@ -57,20 +64,17 @@ export function UserDetail({ user, onBack, onSaved }: {
   useEffect(() => {
     async function load() {
       setLoadingActivity(true);
-      const [soRes, haRes, invRes] = await Promise.all([
-        supabase.from('sign_offs').select('id, site_name, plot_name, task_type, manager_name, created_at')
-          .eq('user_id', user.user_id).order('created_at', { ascending: false }).limit(50),
-        supabase.from('hourly_agreements').select('id, site_name, plot_name, hours, rate, descriptions, created_at')
-          .eq('user_id', user.user_id).order('created_at', { ascending: false }).limit(50),
-        supabase.from('invoices').select('id, status, total_amount, submitted_at, created_at')
-          .eq('user_id', user.user_id).order('created_at', { ascending: false }).limit(50),
+      const [soRes, haRes, invRes] = await Promise.allSettled([
+        fetchUserSignOffs(user.user_id),
+        fetchUserHourlyAgreements(user.user_id),
+        fetchUserInvoices(user.user_id),
       ]);
-      if (soRes.error) toast.error('Failed to load sign-offs');
-      if (haRes.error) toast.error('Failed to load hourly agreements');
-      if (invRes.error) toast.error('Failed to load invoices');
-      setSignOffs((soRes.data || []) as SignOff[]);
-      setHourlyAgreements((haRes.data || []) as HourlyAgreement[]);
-      setInvoices((invRes.data || []) as Invoice[]);
+      if (soRes.status === 'rejected') toast.error('Failed to load sign-offs');
+      if (haRes.status === 'rejected') toast.error('Failed to load hourly agreements');
+      if (invRes.status === 'rejected') toast.error('Failed to load invoices');
+      setSignOffs(soRes.status === 'fulfilled' ? soRes.value : []);
+      setHourlyAgreements(haRes.status === 'fulfilled' ? haRes.value : []);
+      setInvoices(invRes.status === 'fulfilled' ? invRes.value : []);
       setLoadingActivity(false);
     }
     load();
@@ -97,15 +101,18 @@ export function UserDetail({ user, onBack, onSaved }: {
       rate: parseFloat(form.rate) || 18,
     };
 
-    const [pRes, rRes] = await Promise.all([
-      supabase.from('profiles').update(profileUpdate).eq('id', user.id),
+    const [pRes, rRes] = await Promise.allSettled([
+      updateProfile(user.id, profileUpdate),
       user.role_id
-        ? supabase.from('user_roles').update(roleUpdate).eq('id', user.role_id)
-        : supabase.from('user_roles').insert({ user_id: user.user_id, ...roleUpdate }),
+        ? updateUserRole(user.role_id, roleUpdate)
+        : insertUserRole({ user_id: user.user_id, ...roleUpdate }),
     ]);
 
-    if (pRes.error || rRes.error) {
-      toast.error('Save failed: ' + (pRes.error?.message || rRes.error?.message));
+    if (pRes.status === 'rejected' || rRes.status === 'rejected') {
+      const msg =
+        (pRes.status === 'rejected' ? (pRes.reason as Error).message : undefined) ||
+        (rRes.status === 'rejected' ? (rRes.reason as Error).message : undefined);
+      toast.error('Save failed: ' + msg);
     } else {
       toast.success('Saved');
       onSaved({
