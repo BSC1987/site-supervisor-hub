@@ -65,11 +65,9 @@ CREATE POLICY "Admins can delete customer care jobs"
   ON customer_care_jobs FOR DELETE
   USING (has_role(auth.uid(), 'admin'::app_role));
 
-CREATE POLICY "Decorators can view their assigned customer care jobs"
+CREATE POLICY "Decorators can view all customer care jobs"
   ON customer_care_jobs FOR SELECT
-  USING (
-    assigned_decorator_id IN (SELECT id FROM profiles WHERE user_id = auth.uid())
-  );
+  USING (has_role(auth.uid(), 'decorator'::app_role));
 
 CREATE POLICY "Admins can view all customer care defects"
   ON customer_care_defects FOR SELECT
@@ -87,14 +85,6 @@ CREATE POLICY "Admins can delete customer care defects"
   ON customer_care_defects FOR DELETE
   USING (has_role(auth.uid(), 'admin'::app_role));
 
-CREATE POLICY "Decorators can view defects on their assigned jobs"
+CREATE POLICY "Decorators can view all customer care defects"
   ON customer_care_defects FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1
-      FROM customer_care_jobs j
-      JOIN profiles p ON p.id = j.assigned_decorator_id
-      WHERE j.id = customer_care_defects.job_id
-        AND p.user_id = auth.uid()
-    )
-  );
+  USING (has_role(auth.uid(), 'decorator'::app_role));

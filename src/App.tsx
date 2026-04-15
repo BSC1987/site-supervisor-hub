@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { PendingUsersProvider } from "@/contexts/PendingUsersContext";
+import { CustomerCareProvider } from "@/contexts/CustomerCareContext";
 import { AppLayout } from "@/components/AppLayout";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -20,6 +21,7 @@ function ProtectedRoutes() {
 
   return (
     <PendingUsersProvider>
+    <CustomerCareProvider>
     <AppLayout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
@@ -29,6 +31,7 @@ function ProtectedRoutes() {
         <Route path="/customer-care" element={<CustomerCare />} />
       </Routes>
     </AppLayout>
+    </CustomerCareProvider>
     </PendingUsersProvider>
   );
 }

@@ -218,6 +218,29 @@ export async function deleteCustomerCareJob(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function countOpenCustomerCareJobs(): Promise<number | null> {
+  const { count, error } = await supabase
+    .from('customer_care_jobs')
+    .select('*', { count: 'exact', head: true })
+    .neq('status', 'completed');
+  if (error || count == null) return null;
+  return count;
+}
+
+export function subscribeToCustomerCareJobChanges(onChange: () => void): () => void {
+  const channel = supabase
+    .channel('customer-care-jobs')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'customer_care_jobs' },
+      onChange,
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
 export async function fetchDeveloperOptions(): Promise<Array<{ id: string; name: string }>> {
   const { data, error } = await supabase
     .from('developers')
