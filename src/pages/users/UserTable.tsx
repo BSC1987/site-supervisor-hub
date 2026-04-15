@@ -71,9 +71,6 @@ export function UserTable({ label, users, onSelect, onUpdate, onDelete, onToggle
               <TableHead className="h-9 cursor-pointer select-none text-center min-w-[120px]" onClick={() => toggleSort('role')}>
                 Role <SortIcon col="role" />
               </TableHead>
-              <TableHead className="h-9 cursor-pointer select-none text-center min-w-[100px]" onClick={() => toggleSort('rate')}>
-                Hourly Rate <SortIcon col="rate" />
-              </TableHead>
               <TableHead className="h-9 text-center min-w-[100px]">Status</TableHead>
               <TableHead className="h-9 cursor-pointer select-none text-center min-w-[110px]" onClick={() => toggleSort('last_seen')}>
                 Last Seen <SortIcon col="last_seen" />
@@ -109,7 +106,6 @@ export function UserTable({ label, users, onSelect, onUpdate, onDelete, onToggle
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
-                <TableCell className="py-2 text-center">{formatCurrency(u.rate)}</TableCell>
                 <TableCell className="py-2 text-center" onClick={e => e.stopPropagation()}>
                   <DropdownMenu>
                     <DropdownMenuTrigger className={`inline-flex items-center gap-1 rounded-md px-2.5 py-0.5 text-xs font-medium transition-colors outline-none ${
