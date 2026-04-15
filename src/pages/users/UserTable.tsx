@@ -72,12 +72,12 @@ export function UserTable({ label, users, onSelect, onUpdate, onDelete, onToggle
                 Role <SortIcon col="role" />
               </TableHead>
               <TableHead className="h-9 text-center min-w-[100px]">Status</TableHead>
-              <TableHead className="h-9 cursor-pointer select-none text-center min-w-[110px]" onClick={() => toggleSort('last_seen')}>
-                Last Seen <SortIcon col="last_seen" />
-              </TableHead>
               {onToggleNotification && STAFF_NOTIFICATION_FIELDS.map(({ key, label }) => (
                 <TableHead key={key} className="h-9 text-center min-w-[100px]">{label}</TableHead>
               ))}
+              <TableHead className="h-9 cursor-pointer select-none text-center min-w-[110px]" onClick={() => toggleSort('last_seen')}>
+                Last Seen <SortIcon col="last_seen" />
+              </TableHead>
               {onDelete && <TableHead className="h-9" />}
             </TableRow>
           </TableHeader>
@@ -125,9 +125,6 @@ export function UserTable({ label, users, onSelect, onUpdate, onDelete, onToggle
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
-                <TableCell className="py-2 text-center text-muted-foreground text-xs">
-                  {formatRelativeTime(u.last_seen_at)}
-                </TableCell>
                 {onToggleNotification && STAFF_NOTIFICATION_FIELDS.map(({ key }) => (
                   <TableCell key={key} className="py-2 text-center" onClick={e => e.stopPropagation()}>
                     <Switch
@@ -136,6 +133,9 @@ export function UserTable({ label, users, onSelect, onUpdate, onDelete, onToggle
                     />
                   </TableCell>
                 ))}
+                <TableCell className="py-2 text-center text-muted-foreground text-xs">
+                  {formatRelativeTime(u.last_seen_at)}
+                </TableCell>
                 {onDelete && (
                   <TableCell className="py-2 text-center" onClick={e => e.stopPropagation()}>
                     <Button
