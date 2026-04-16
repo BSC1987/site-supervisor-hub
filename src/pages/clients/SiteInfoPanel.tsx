@@ -20,6 +20,17 @@ import { fetchSiteDetail, updateSite, uploadSitePlan } from '@/api/sites';
  * Site plans are round-tripped as newline-separated URLs so we don't need a
  * schema change to support multiple files.
  */
+function parseGridRef(raw: string | null | undefined): { lat: number | null; lng: number | null } {
+  const trimmed = (raw ?? '').trim();
+  if (!trimmed) return { lat: null, lng: null };
+  const match = trimmed.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
+  if (!match) return { lat: null, lng: null };
+  const lat = parseFloat(match[1]);
+  const lng = parseFloat(match[2]);
+  if (isNaN(lat) || isNaN(lng)) return { lat: null, lng: null };
+  return { lat, lng };
+}
+
 export function SiteInfoPanel({
   siteId,
   initialName,
@@ -46,11 +57,20 @@ export function SiteInfoPanel({
         if (cancelled) return;
         setName(data?.name ?? '');
         setAddress(data?.address ?? '');
-        setGridRef(data?.grid_reference ?? '');
-        setLatitude(data?.latitude != null ? String(data.latitude) : '');
-        setLongitude(data?.longitude != null ? String(data.longitude) : '');
+        const gridRaw = data?.grid_reference ?? '';
+        setGridRef(gridRaw);
+        const parsed = parseGridRef(gridRaw);
+        setLatitude(parsed.lat != null ? String(parsed.lat) : '');
+        setLongitude(parsed.lng != null ? String(parsed.lng) : '');
         const raw: string = data?.site_plans ?? '';
         setPlans(raw ? raw.split('\n').filter(Boolean) : []);
+
+        const storedLat = data?.latitude ?? null;
+        const storedLng = data?.longitude ?? null;
+        if (parsed.lat !== storedLat || parsed.lng !== storedLng) {
+          updateSite(siteId, { latitude: parsed.lat, longitude: parsed.lng })
+            .catch(() => {});
+        }
       } catch (err) {
         if (cancelled) return;
         toast.error('Failed to load site: ' + (err as Error).message);
@@ -82,17 +102,6 @@ export function SiteInfoPanel({
   };
 
   const handleAddressBlur = () => saveField('address', address.trim());
-
-  const parseGridRef = (raw: string): { lat: number | null; lng: number | null } => {
-    const trimmed = raw.trim();
-    if (!trimmed) return { lat: null, lng: null };
-    const match = trimmed.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
-    if (!match) return { lat: null, lng: null };
-    const lat = parseFloat(match[1]);
-    const lng = parseFloat(match[2]);
-    if (isNaN(lat) || isNaN(lng)) return { lat: null, lng: null };
-    return { lat, lng };
-  };
 
   const handleGridRefBlur = async () => {
     const trimmed = gridRef.trim();
