@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, SUPABASE_URL } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,8 +10,6 @@ import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Plus, Pencil, Trash2, Search, ChevronRight, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
-
-const SUPABASE_URL = 'https://xhqornncpcgewlbzutsd.supabase.co';
 
 export interface FieldConfig {
   key: string;

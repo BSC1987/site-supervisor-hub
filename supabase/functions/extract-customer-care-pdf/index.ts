@@ -13,11 +13,32 @@ const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')!;
 const MODEL = 'claude-sonnet-4-5-20250929';
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+// Comma-separated allowlist of browser origins permitted to call this function.
+// Example: "https://admin.cordec.co.uk,https://site-supervisor-hub.vercel.app"
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+function corsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get('origin') ?? '';
+  const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0] ?? '';
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    Vary: 'Origin',
+  };
+}
+
+// Storage paths must be under `uploads/` and contain only safe characters.
+// Rejects path traversal (`..`), absolute paths, and unusual characters.
+const SAFE_PATH_RE = /^uploads\/[A-Za-z0-9._\-\/]+\.pdf$/i;
+function isSafeStoragePath(path: string): boolean {
+  if (!SAFE_PATH_RE.test(path)) return false;
+  if (path.includes('..')) return false;
+  return true;
+}
 
 const SYSTEM_PROMPT = `You extract structured data from UK housebuilder customer-care / warranty PDFs for a decorating contractor (Cordec Ltd).
 
@@ -203,14 +224,15 @@ async function callClaude(pdfBase64: string): Promise<ExtractedShape> {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response(null, { headers: CORS_HEADERS });
+  const cors = corsHeaders(req);
+  if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
 
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Missing Authorization header' }), {
         status: 401,
-        headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
+        headers: { ...cors, 'content-type': 'application/json' },
       });
     }
 
@@ -220,7 +242,7 @@ Deno.serve(async (req) => {
     if (userError || !userData.user) {
       return new Response(JSON.stringify({ error: 'Invalid auth' }), {
         status: 401,
-        headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
+        headers: { ...cors, 'content-type': 'application/json' },
       });
     }
 
@@ -232,15 +254,15 @@ Deno.serve(async (req) => {
     if (!isAdmin) {
       return new Response(JSON.stringify({ error: 'Forbidden' }), {
         status: 403,
-        headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
+        headers: { ...cors, 'content-type': 'application/json' },
       });
     }
 
     const { path } = await req.json();
-    if (!path || typeof path !== 'string') {
-      return new Response(JSON.stringify({ error: 'Missing "path" in body' }), {
+    if (!path || typeof path !== 'string' || !isSafeStoragePath(path)) {
+      return new Response(JSON.stringify({ error: 'Invalid "path" in body' }), {
         status: 400,
-        headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
+        headers: { ...cors, 'content-type': 'application/json' },
       });
     }
 
@@ -248,9 +270,9 @@ Deno.serve(async (req) => {
       .from('customer-care')
       .download(path);
     if (dlError || !pdfBlob) {
-      return new Response(JSON.stringify({ error: `PDF download failed: ${dlError?.message}` }), {
+      return new Response(JSON.stringify({ error: 'PDF not found' }), {
         status: 404,
-        headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
+        headers: { ...cors, 'content-type': 'application/json' },
       });
     }
 
@@ -277,13 +299,14 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({ ...extracted, suggested_developer_id, suggested_site_id }),
-      { headers: { ...CORS_HEADERS, 'content-type': 'application/json' } },
+      { headers: { ...cors, 'content-type': 'application/json' } },
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return new Response(JSON.stringify({ error: message }), {
+    console.error('extract-customer-care-pdf error:', message);
+    return new Response(JSON.stringify({ error: 'Internal error' }), {
       status: 500,
-      headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
+      headers: { ...cors, 'content-type': 'application/json' },
     });
   }
 });

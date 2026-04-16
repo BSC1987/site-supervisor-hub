@@ -1,6 +1,6 @@
 import type { FieldConfig } from '@/components/EntityPage';
 
-export const SUPABASE_URL = 'https://xhqornncpcgewlbzutsd.supabase.co';
+export { SUPABASE_URL } from '@/lib/supabase';
 
 export interface DrillState {
   developer?: { id: string; name: string };

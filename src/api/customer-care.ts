@@ -85,8 +85,7 @@ export interface ExtractedJob {
 const BUCKET = 'customer-care';
 
 export async function uploadCustomerCarePdf(file: File): Promise<string> {
-  const ext = file.name.split('.').pop() ?? 'pdf';
-  const path = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const path = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.pdf`;
   const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
     upsert: false,
     contentType: 'application/pdf',

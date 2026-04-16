@@ -18,8 +18,8 @@ export default function ResetPassword() {
     e.preventDefault();
     setError('');
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (password.length < 12) {
+      setError('Password must be at least 12 characters');
       return;
     }
     if (password !== confirm) {
@@ -61,7 +61,7 @@ export default function ResetPassword() {
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   required
-                  minLength={6}
+                  minLength={12}
                 />
               </div>
               <div className="space-y-2">
@@ -72,7 +72,7 @@ export default function ResetPassword() {
                   value={confirm}
                   onChange={e => setConfirm(e.target.value)}
                   required
-                  minLength={6}
+                  minLength={12}
                 />
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
