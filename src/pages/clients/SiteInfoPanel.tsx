@@ -114,6 +114,11 @@ export function SiteInfoPanel({
         latitude: lat,
         longitude: lng,
       });
+      if (trimmed && lat == null) {
+        toast.warning('Saved, but grid reference could not be parsed as "lat, lng"');
+      } else {
+        toast.success('Grid reference updated');
+      }
     } catch (err) {
       toast.error('Save failed: ' + (err as Error).message);
     }
