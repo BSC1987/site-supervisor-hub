@@ -123,7 +123,7 @@ export default function Dashboard() {
         />
         <StatCard
           icon={Receipt}
-          label="Labour + Materials"
+          label="Labour, Materials and Markup"
           value={formatCurrency(totalWithMarkup)}
           colour="text-indigo-500"
         />
