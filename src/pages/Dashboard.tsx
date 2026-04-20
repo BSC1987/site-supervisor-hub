@@ -119,12 +119,11 @@ export default function Dashboard() {
           icon={Package}
           label="Materials"
           value={formatCurrency(materialsValue)}
-          sub="10% of total turnover"
           colour="text-cyan-500"
         />
         <StatCard
           icon={Receipt}
-          label="Labour + Materials (30% markup)"
+          label="Labour + Materials"
           value={formatCurrency(totalWithMarkup)}
           colour="text-indigo-500"
         />
