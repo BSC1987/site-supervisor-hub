@@ -69,7 +69,7 @@ export default function SiteMap() {
   }, [loading, sites]);
 
   return (
-    <div className="border rounded-lg bg-card overflow-hidden">
+    <div className="border rounded-lg bg-card overflow-hidden isolate">
       <div className="px-5 py-3 border-b border-border/60 flex items-center justify-between">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Site Locations
